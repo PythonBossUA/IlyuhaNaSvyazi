@@ -16,7 +16,12 @@
 <script>
     var client_id = Date.now()
     document.querySelector("#ws-id").textContent = client_id;
-    var ws = new WebSocket(`ws://localhost:8000/ws/${client_id}`);
+
+    // Автоматичне визначення протоколу (ws/wss) і хосту
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${client_id}`;
+    var ws = new WebSocket(wsUrl);
+
     ws.onmessage = function (event) {
         var messages = document.getElementById('messages')
         var message = document.createElement('li')
