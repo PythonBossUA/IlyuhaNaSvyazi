@@ -21,6 +21,7 @@ ws_connections: dict[str, dict] = {}
 # Base64URL утиліти
 # ============================================================
 
+
 def b64url_no_padding(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -34,6 +35,7 @@ def b64url_to_int(value: str) -> int:
 # ============================================================
 # ECDH ключі
 # ============================================================
+
 
 def generate_private_key():
     return ec.generate_private_key(ec.SECP256R1())
@@ -61,11 +63,7 @@ def import_public_jwk(jwk: dict):
     x = b64url_to_int(jwk["x"])
     y = b64url_to_int(jwk["y"])
 
-    public_numbers = ec.EllipticCurvePublicNumbers(
-        x=x,
-        y=y,
-        curve=ec.SECP256R1()
-    )
+    public_numbers = ec.EllipticCurvePublicNumbers(x=x, y=y, curve=ec.SECP256R1())
 
     return public_numbers.public_key()
 
@@ -74,12 +72,8 @@ def import_public_jwk(jwk: dict):
 # Виведення AES-ключа
 # ============================================================
 
-def derive_aes_key(
-    my_private_key,
-    peer_public_key,
-    salt: bytes,
-    info: bytes
-) -> bytes:
+
+def derive_aes_key(my_private_key, peer_public_key, salt: bytes, info: bytes) -> bytes:
     shared_secret = my_private_key.exchange(ec.ECDH(), peer_public_key)
 
     hkdf = HKDF(
@@ -94,6 +88,7 @@ def derive_aes_key(
 # ============================================================
 # Шифрування / розшифрування
 # ============================================================
+
 
 def encrypt_text(key: bytes, text: str, client_id: str) -> bytes:
     nonce = os.urandom(12)
@@ -116,12 +111,13 @@ def decrypt_text(key: bytes, packet: bytes, client_id: str) -> str:
 # Broadcast
 # ============================================================
 
+
 async def broadcast_encrypted(
     message: str,
     message_type: str = "encrypted_message",
     exclude_client_id: str = None,
     event: str = None,
-    source_client_id: str = None
+    source_client_id: str = None,
 ):
     for client_id, connection in list(ws_connections.items()):
         if client_id == exclude_client_id:
@@ -132,7 +128,7 @@ async def broadcast_encrypted(
 
             payload = {
                 "type": message_type,
-                "data": base64.b64encode(encrypted).decode()
+                "data": base64.b64encode(encrypted).decode(),
             }
 
             if message_type == "system_message":
@@ -151,17 +147,17 @@ async def broadcast_encrypted(
 # Routes
 # ============================================================
 
+
+@app.head("/")
+def render_uptime():
+    return
+
+
 @app.get("/")
 async def index(request: Request):
     client_id = str(uuid.uuid4())
 
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "client_id": client_id
-        }
-    )
+    return templates.TemplateResponse(request, "index.html", {"client_id": client_id})
 
 
 @app.websocket("/ws/{client_id}")
@@ -172,21 +168,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     registered = False
 
     try:
-        client_public_json__task = asyncio.create_task(
-            websocket.receive_json()
-        )
+        client_public_json__task = asyncio.create_task(websocket.receive_json())
 
         server_private_key = generate_private_key()
         server_public_jwk = export_public_jwk(server_private_key)
 
-        await websocket.send_json({
-            "type": "public_key",
-            "jwk": server_public_jwk
-        })
+        await websocket.send_json({"type": "public_key", "jwk": server_public_jwk})
 
-        client_public_json = await asyncio.wait_for(
-            client_public_json__task, timeout=5
-        )
+        client_public_json = await asyncio.wait_for(client_public_json__task, timeout=5)
 
         if not isinstance(client_public_json, dict):
             raise ValueError("Invalid handshake message")
@@ -205,10 +194,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         info = b"default_messenger"
 
         server_aes_key = derive_aes_key(
-            server_private_key,
-            client_public_key,
-            salt,
-            info
+            server_private_key, client_public_key, salt, info
         )
 
         old_ws = ws_connections.get(client_id)
@@ -220,22 +206,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 except Exception:
                     pass
 
-        ws_connections[client_id] = {
-            "ws": websocket,
-            "aes_key": server_aes_key
-        }
+        ws_connections[client_id] = {"ws": websocket, "aes_key": server_aes_key}
         registered = True
 
-        await websocket.send_json({
-            "type": "handshake_ok"
-        })
+        await websocket.send_json({"type": "handshake_ok"})
 
         await broadcast_encrypted(
             message=f"Client {client_id} connected",
             message_type="system_message",
             exclude_client_id=client_id,
             event="connected",
-            source_client_id=client_id
+            source_client_id=client_id,
         )
 
         while True:
@@ -258,7 +239,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             await broadcast_encrypted(
                 message=message,
                 message_type="encrypted_message",
-                exclude_client_id=client_id
+                exclude_client_id=client_id,
             )
 
     except WebSocketDisconnect:
@@ -284,7 +265,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         message_type="system_message",
                         exclude_client_id=client_id,
                         event="disconnected",
-                        source_client_id=client_id
+                        source_client_id=client_id,
                     )
                 except Exception:
                     pass
