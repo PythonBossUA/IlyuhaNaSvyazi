@@ -2,35 +2,289 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ілюха на связі!</title>
+  <title>Encrypted Messenger</title>
 </head>
 <body>
-<h1>Ілюха на связі!</h1>
+<h1>Encrypted Messenger</h1>
+<div id="status">Connecting...</div>
 <form action="" onsubmit="sendMessage(event)">
-  <input type="text" id="messageText" autocomplete="off"/>
-  <button>Send</button>
+  <input type="text" id="messageText" autocomplete="off" disabled/>
+  <button type="submit" disabled>Send</button>
 </form>
-<ul id="messages">
-</ul>
+<ul id="messages"></ul>
+
 <script>
+    const clientId = "{{ client_id }}";
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/{{ client_id }}`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
 
-    var ws = new WebSocket(wsUrl);
+    let aesKey = null;
+    let myKeyPair = null;
 
-    ws.onmessage = function (event) {
-        var messages = document.getElementById("messages")
-        var message = document.createElement("li")
-        var content = document.createTextNode(event.data)
-        message.appendChild(content)
-        messages.appendChild(message)
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    // ============================================================
+    // Утиліти для Base64
+    // ============================================================
+
+    function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    function base64ToArrayBuffer(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    // ============================================================
+    // Генерація ECDH P-256 ключів
+    // ============================================================
+
+    async function generateEcdhKeyPair() {
+        return await crypto.subtle.generateKey(
+            {
+                name: "ECDH",
+                namedCurve: "P-256"
+            },
+            true,
+            ["deriveBits"]
+        );
+    }
+
+    async function exportPublicJwk(keyPair) {
+        const jwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+        return {
+            kty: jwk.kty,
+            crv: jwk.crv,
+            x: jwk.x,
+            y: jwk.y
+        };
+    }
+
+    async function importPublicJwk(jwk) {
+        return await crypto.subtle.importKey(
+            "jwk",
+            jwk,
+            {
+                name: "ECDH",
+                namedCurve: "P-256"
+            },
+            false,
+            []
+        );
+    }
+
+    // ============================================================
+    // Виведення AES-ключа через ECDH + HKDF
+    // ============================================================
+
+    async function deriveAesKey(privateKey, peerPublicKey, saltStr, infoStr) {
+        const sharedSecretBits = await crypto.subtle.deriveBits(
+            {
+                name: "ECDH",
+                public: peerPublicKey
+            },
+            privateKey,
+            256
+        );
+
+        const hkdfKey = await crypto.subtle.importKey(
+            "raw",
+            sharedSecretBits,
+            "HKDF",
+            false,
+            ["deriveKey"]
+        );
+
+        return await crypto.subtle.deriveKey(
+            {
+                name: "HKDF",
+                hash: "SHA-256",
+                salt: enc.encode(saltStr),
+                info: enc.encode(infoStr)
+            },
+            hkdfKey,
+            {
+                name: "AES-GCM",
+                length: 256
+            },
+            false,
+            ["encrypt", "decrypt"]
+        );
+    }
+
+    // ============================================================
+    // Шифрування / розшифрування
+    // ============================================================
+
+    function makeRandomNonce() {
+        const nonce = new Uint8Array(12);
+        crypto.getRandomValues(nonce);
+        return nonce;
+    }
+
+    async function encryptText(text) {
+        if (!aesKey) {
+            throw new Error("AES key not derived yet");
+        }
+
+        const nonce = makeRandomNonce();
+        const aad = enc.encode(`client_id=${clientId}|v=1`);
+
+        const ciphertext = await crypto.subtle.encrypt(
+            {
+                name: "AES-GCM",
+                iv: nonce,
+                additionalData: aad
+            },
+            aesKey,
+            enc.encode(text)
+        );
+
+        const result = new Uint8Array(nonce.length + ciphertext.byteLength);
+        result.set(nonce, 0);
+        result.set(new Uint8Array(ciphertext), nonce.length);
+
+        return arrayBufferToBase64(result.buffer);
+    }
+
+    async function decryptText(base64Packet) {
+        if (!aesKey) {
+            throw new Error("AES key not derived yet");
+        }
+
+        const packet = new Uint8Array(base64ToArrayBuffer(base64Packet));
+        const nonce = packet.slice(0, 12);
+        const ciphertext = packet.slice(12);
+
+        const aad = enc.encode(`client_id=${clientId}|v=1`);
+
+        const plaintext = await crypto.subtle.decrypt(
+            {
+                name: "AES-GCM",
+                iv: nonce,
+                additionalData: aad
+            },
+            aesKey,
+            ciphertext
+        );
+
+        return dec.decode(plaintext);
+    }
+
+    // ============================================================
+    // WebSocket
+    // ============================================================
+
+    const ws = new WebSocket(wsUrl);
+    const statusDiv = document.getElementById("status");
+
+    ws.onopen = async function() {
+        statusDiv.textContent = "Connected, performing handshake...";
+
+        try {
+            myKeyPair = await generateEcdhKeyPair();
+            const myPublicJwk = await exportPublicJwk(myKeyPair);
+
+            ws.send(JSON.stringify({
+                type: "public_key",
+                jwk: myPublicJwk
+            }));
+
+        } catch (error) {
+            statusDiv.textContent = "Error: " + error.message;
+            console.error(error);
+        }
     };
 
-    function sendMessage(event) {
-        var input = document.getElementById("messageText")
-        ws.send(input.value)
-        input.value = ""
-        event.preventDefault()
+    ws.onmessage = async function(event) {
+        try {
+            const message = JSON.parse(event.data);
+
+            if (message.type === "public_key") {
+                const serverPublicKey = await importPublicJwk(message.jwk);
+
+                aesKey = await deriveAesKey(
+                    myKeyPair.privateKey,
+                    serverPublicKey,
+                    clientId,
+                    "default_messenger"
+                );
+
+                statusDiv.textContent = "Waiting for handshake confirmation...";
+            }
+
+            else if (message.type === "handshake_ok") {
+                statusDiv.textContent = "Handshake complete!";
+                document.getElementById("messageText").disabled = false;
+                document.querySelector("button").disabled = false;
+            }
+
+            else if (message.type === "encrypted_message") {
+                const plaintext = await decryptText(message.data);
+                addMessage("Received: " + plaintext);
+            }
+
+            else if (message.type === "message") {
+                addMessage(message.content);
+            }
+
+        } catch (error) {
+            console.error("Error:", error);
+            addMessage("Error: " + error.message);
+        }
+    };
+
+    ws.onerror = function(error) {
+        statusDiv.textContent = "WebSocket error";
+        console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = function() {
+        statusDiv.textContent = "Disconnected";
+        document.getElementById("messageText").disabled = true;
+        document.querySelector("button").disabled = true;
+    };
+
+    async function sendMessage(event) {
+        event.preventDefault();
+        const input = document.getElementById("messageText");
+        const text = input.value.trim();
+
+        if (!text || !aesKey) return;
+
+        try {
+            const encryptedData = await encryptText(text);
+
+            ws.send(JSON.stringify({
+                type: "encrypted_message",
+                data: encryptedData
+            }));
+
+            addMessage("Sent: " + text);
+            input.value = "";
+
+        } catch (error) {
+            addMessage("Encryption error: " + error.message);
+            console.error(error);
+        }
+    }
+
+    function addMessage(text) {
+        const messages = document.getElementById("messages");
+        const message = document.createElement("li");
+        message.textContent = text;
+        messages.appendChild(message);
     }
 </script>
 </body>
