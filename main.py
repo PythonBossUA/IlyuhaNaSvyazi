@@ -1,6 +1,9 @@
+import uuid
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
-# from starlette.staticfiles import StaticFiles
+
+# from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -32,15 +35,26 @@ manager = ConnectionManager()
 
 @app.get("/")
 async def index(request: Request):
+    client_id = str(uuid.uuid4())
+    is_https = request.url.scheme == "https"
+    if is_https:
+        ws_protocol = "wss"
+        host = request.url.hostname
+    else:
+        ws_protocol = "ws"
+        host = request.url.netloc
+
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"title": "Илюха на связи!"}
+        {
+            "ws_url": f"{ws_protocol}://{host}/ws/{client_id}"
+        }
     )
 
 
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: int):
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await manager.connect(websocket)
     try:
         while True:
