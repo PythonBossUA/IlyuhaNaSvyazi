@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Илюха на связи!</title>
+  <title>Ілюха на связі!</title>
 </head>
 <body>
-<h1>Илюха на связи!</h1>
+<h1>Ілюха на связі!</h1>
 <form action="" onsubmit="sendMessage(event)">
   <input type="text" id="messageText" autocomplete="off"/>
   <button>Send</button>
@@ -13,9 +13,10 @@
 <ul id="messages">
 </ul>
 <script>
-    var ws = new WebSocket(
-        "{{ ws_url }}"
-    );
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/{{ client_id }}`;
+
+    var ws = new WebSocket(wsUrl);
 
     ws.onmessage = function (event) {
         var messages = document.getElementById("messages")
