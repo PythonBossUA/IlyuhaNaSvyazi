@@ -1,4 +1,7 @@
 fastapi
 jinja2
 cryptography
+SQLAlchemy[asyncio]
+alembic
+asyncpg
 granian
