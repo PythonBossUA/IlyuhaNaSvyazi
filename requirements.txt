@@ -4,4 +4,5 @@ cryptography
 SQLAlchemy[asyncio]
 alembic
 asyncpg
+argon2-cffi
 granian

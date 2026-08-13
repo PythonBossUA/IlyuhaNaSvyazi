@@ -168,6 +168,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     registered = False
 
     try:
+        """
+        ====== HANDSHAKE ======
+        """
         client_public_json__task = asyncio.create_task(websocket.receive_json())
 
         server_private_key = generate_private_key()
@@ -191,7 +194,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         client_public_key = import_public_jwk(client_public_jwk)
 
         salt = client_id.encode()
-        info = b"default_messenger"
+        info = b"ilyuha_na_svyazi"
 
         server_aes_key = derive_aes_key(
             server_private_key, client_public_key, salt, info
@@ -210,6 +213,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         registered = True
 
         await websocket.send_json({"type": "handshake_ok"})
+        """
+        ====== Success Handshake ======
+        """
+
+
 
         await broadcast_encrypted(
             message=f"Client {client_id} connected",
