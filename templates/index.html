@@ -267,6 +267,109 @@
             cursor: not-allowed;
         }
 
+        /* Auth overlay */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 15, 35, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .auth-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 8px 32px var(--shadow);
+        }
+
+        .auth-card h2 {
+            text-align: center;
+            margin-bottom: 24px;
+            font-size: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .auth-field {
+            margin-bottom: 16px;
+        }
+
+        .auth-field label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .auth-field input {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .auth-field input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.1);
+        }
+
+        .auth-button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--accent), #0099cc);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 8px;
+        }
+
+        .auth-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 217, 255, 0.3);
+        }
+
+        .auth-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .auth-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .auth-error.visible {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
         /* Error message */
         .error-message {
             background: rgba(239, 68, 68, 0.1);
@@ -309,6 +412,10 @@
             .input-form button {
                 padding: 14px 20px;
             }
+
+            .auth-card {
+                padding: 24px;
+            }
         }
     </style>
 </head>
@@ -321,7 +428,7 @@
 
         <div class="status" id="status">
             <span class="status-dot" id="statusDot"></span>
-            <span id="statusText">Connecting...</span>
+            <span id="statusText">Підключення...</span>
         </div>
 
         <div class="error-message" id="errorMessage"></div>
@@ -333,12 +440,55 @@
                 <input
                     type="text"
                     id="messageText"
-                    placeholder="Суда пиши бля..."
+                    placeholder="Сюда пиши"
                     autocomplete="off"
                     disabled
                 />
-                <button type="submit" id="sendButton" disabled>Отослать</button>
+                <button type="submit" id="sendButton" disabled>Відправити</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Auth Overlay -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-card">
+            <h2 id="authTitle">Авторизація</h2>
+
+            <div class="auth-error" id="authError"></div>
+
+            <!-- Login Form -->
+            <div id="loginForm">
+                <div class="auth-field">
+                    <label for="loginInput">Логін</label>
+                    <input type="text" id="loginInput" autocomplete="username" />
+                </div>
+
+                <div class="auth-field">
+                    <label for="passwordInput">Пароль</label>
+                    <input type="password" id="passwordInput" autocomplete="current-password" />
+                </div>
+
+                <button class="auth-button" id="loginButton" onclick="sendAuthorization()">
+                    Увійти
+                </button>
+            </div>
+
+            <!-- Password Change Form -->
+            <div id="passwordChangeForm" class="hidden">
+                <div class="auth-field">
+                    <label for="newPasswordInput">Новий пароль</label>
+                    <input type="password" id="newPasswordInput" autocomplete="new-password" />
+                </div>
+
+                <div class="auth-field">
+                    <label for="confirmPasswordInput">Підтвердіть новий пароль</label>
+                    <input type="password" id="confirmPasswordInput" autocomplete="new-password" />
+                </div>
+
+                <button class="auth-button" id="changePasswordButton" onclick="sendPasswordChange()">
+                    Змінити пароль
+                </button>
+            </div>
         </div>
     </div>
 
@@ -349,6 +499,7 @@
 
         let aesKey = null;
         let myKeyPair = null;
+        let isAuthenticated = false;
 
         const enc = new TextEncoder();
         const dec = new TextDecoder();
@@ -464,7 +615,7 @@
 
         async function encryptText(text) {
             if (!aesKey) {
-                throw new Error("AES key not derived yet");
+                throw new Error("AES ключ ще не виведено");
             }
 
             const nonce = makeRandomNonce();
@@ -489,7 +640,7 @@
 
         async function decryptText(base64Packet) {
             if (!aesKey) {
-                throw new Error("AES key not derived yet");
+                throw new Error("AES ключ ще не виведено");
             }
 
             const packet = new Uint8Array(base64ToArrayBuffer(base64Packet));
@@ -537,6 +688,17 @@
             setTimeout(() => {
                 errorDiv.classList.remove('visible');
             }, 5000);
+        }
+
+        function showAuthError(message) {
+            const errorDiv = document.getElementById("authError");
+            errorDiv.textContent = message;
+            errorDiv.classList.add('visible');
+        }
+
+        function hideAuthError() {
+            const errorDiv = document.getElementById("authError");
+            errorDiv.classList.remove('visible');
         }
 
         function getTimeString() {
@@ -588,6 +750,118 @@
             document.getElementById("sendButton").disabled = !enabled;
         }
 
+        function showAuthOverlay() {
+            document.getElementById("authOverlay").classList.remove("hidden");
+        }
+
+        function hideAuthOverlay() {
+            document.getElementById("authOverlay").classList.add("hidden");
+        }
+
+        function showLoginForm() {
+            document.getElementById("loginForm").classList.remove("hidden");
+            document.getElementById("passwordChangeForm").classList.add("hidden");
+            document.getElementById("authTitle").textContent = "Авторизація";
+            hideAuthError();
+        }
+
+        function showPasswordChangeForm() {
+            document.getElementById("loginForm").classList.add("hidden");
+            document.getElementById("passwordChangeForm").classList.remove("hidden");
+            document.getElementById("authTitle").textContent = "Зміна пароля";
+            hideAuthError();
+        }
+
+        // ============================================================
+        // Відправка авторизації
+        // ============================================================
+
+        async function sendAuthorization() {
+            hideAuthError();
+
+            const login = document.getElementById("loginInput").value.trim();
+            const password = document.getElementById("passwordInput").value;
+
+            if (!login) {
+                showAuthError("Введіть логін");
+                return;
+            }
+
+            if (!password) {
+                showAuthError("Введіть пароль");
+                return;
+            }
+
+            if (!aesKey) {
+                showAuthError("Шифрування ще не налаштовано");
+                return;
+            }
+
+            try {
+                const encryptedPassword = await encryptText(password);
+
+                ws.send(JSON.stringify({
+                    type: "authorization",
+                    login: login,
+                    password: encryptedPassword
+                }));
+
+                document.getElementById("loginButton").disabled = true;
+                updateStatus("Авторизація...", "connecting");
+
+            } catch (error) {
+                showAuthError("Помилка шифрування: " + error.message);
+                console.error(error);
+            }
+        }
+
+        // ============================================================
+        // Відправка зміни пароля
+        // ============================================================
+
+        async function sendPasswordChange() {
+            hideAuthError();
+
+            const newPassword = document.getElementById("newPasswordInput").value;
+            const confirmPassword = document.getElementById("confirmPasswordInput").value;
+
+            if (!newPassword) {
+                showAuthError("Введіть новий пароль");
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                showAuthError("Пароль має бути не менше 6 символів");
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showAuthError("Паролі не співпадають");
+                return;
+            }
+
+            if (!aesKey) {
+                showAuthError("Шифрування ще не налаштовано");
+                return;
+            }
+
+            try {
+                const encryptedPassword = await encryptText(newPassword);
+
+                ws.send(JSON.stringify({
+                    type: "password_change",
+                    new_password: encryptedPassword
+                }));
+
+                document.getElementById("changePasswordButton").disabled = true;
+                updateStatus("Зміна пароля...", "connecting");
+
+            } catch (error) {
+                showAuthError("Помилка шифрування: " + error.message);
+                console.error(error);
+            }
+        }
+
         // ============================================================
         // WebSocket
         // ============================================================
@@ -595,7 +869,7 @@
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = async function() {
-            updateStatus("Connected, performing handshake...", "connecting");
+            updateStatus("Підключено, виконується рукостискання...", "connecting");
 
             try {
                 myKeyPair = await generateEcdhKeyPair();
@@ -607,7 +881,7 @@
                 }));
 
             } catch (error) {
-                updateStatus("Error: " + error.message, "error");
+                updateStatus("Помилка: " + error.message, "error");
                 showError(error.message);
                 console.error(error);
             }
@@ -625,25 +899,73 @@
                         myKeyPair.privateKey,
                         serverPublicKey,
                         clientId,
-                        "ilyuha_na_svyazi"
+                        "ilyuha-na-svyazi|v1|aes-gcm-256"
                     );
+
+                    addSystemMessage("🔐 Рукостискання завершено");
                 }
 
                 // Підтвердження handshake
                 else if (message.type === "handshake_ok") {
-                    updateStatus("Повідомлення шифровані, продам гараж", "connected");
+                    updateStatus("Очікується авторизація", "connecting");
+                    addSystemMessage("✅ Безпечне з'єднання встановлено");
+                }
+
+                // Помилка авторизації
+                else if (message.type === "auth_error") {
+                    showAuthError(message.message || "Невідома помилка авторизації");
+                    document.getElementById("loginButton").disabled = false;
+                    updateStatus("Помилка авторизації", "error");
+                    addSystemMessage("❌ " + (message.message || "Помилка авторизації"));
+                }
+
+                // Потреба зміни пароля
+                else if (message.type === "need_password_change") {
+                    updateStatus("Потрібна зміна пароля", "connecting");
+                    addSystemMessage("⚠️ Необхідно змінити пароль");
+                    showPasswordChangeForm();
+                }
+
+                // Помилка зміни пароля
+                else if (message.type === "password_change_error") {
+                    showAuthError(message.message || "Невідома помилка зміни пароля");
+                    document.getElementById("changePasswordButton").disabled = false;
+                    updateStatus("Помилка зміни пароля", "error");
+                    addSystemMessage("❌ " + (message.message || "Помилка зміни пароля"));
+                }
+
+                // Успішна авторизація
+                else if (message.type === "auth_success") {
+                    isAuthenticated = true;
+                    hideAuthOverlay();
                     setInputEnabled(true);
-                    addSystemMessage("🔐 Secure connection established");
+                    updateStatus("Підключено", "connected");
+                    addSystemMessage("🎉 Авторизація успішна! Ласкаво просимо до чату");
+
+                    // Автоматичний фокус на поле вводу
+                    setTimeout(() => {
+                        document.getElementById("messageText").focus();
+                    }, 100);
                 }
 
                 // Зашифроване повідомлення
                 else if (message.type === "encrypted_message") {
+                    if (!isAuthenticated) {
+                        console.warn("Отримано повідомлення до авторизації");
+                        return;
+                    }
+
                     const plaintext = await decryptText(message.data);
                     addMessage(plaintext, "received");
                 }
 
                 // Системне повідомлення
                 else if (message.type === "system_message") {
+                    if (!isAuthenticated) {
+                        console.warn("Отримано системне повідомлення до авторизації");
+                        return;
+                    }
+
                     const plaintext = await decryptText(message.data);
 
                     if (message.event === "connected") {
@@ -661,21 +983,28 @@
                 }
 
             } catch (error) {
-                console.error("Error:", error);
-                showError(error.message);
+                console.error("Помилка обробки повідомлення:", error);
+                showError("Помилка обробки: " + error.message);
             }
         };
 
         ws.onerror = function(error) {
-            updateStatus("WebSocket error", "error");
-            showError("WebSocket connection error");
-            console.error("WebSocket error:", error);
+            updateStatus("Помилка WebSocket", "error");
+            showError("Помилка з'єднання WebSocket");
+            console.error("Помилка WebSocket:", error);
         };
 
-        ws.onclose = function() {
-            updateStatus("Disconnected", "error");
+        ws.onclose = function(event) {
+            updateStatus("Відключено", "error");
             setInputEnabled(false);
-            addSystemMessage("⚠️ Connection closed");
+            isAuthenticated = false;
+
+            if (event.code === 1008) {
+                showError("З'єднання закрито через порушення політики");
+                addSystemMessage("⚠️ З'єднання закрито сервером (порушення політики)");
+            } else {
+                addSystemMessage("⚠️ З'єднання закрито");
+            }
         };
 
         // ============================================================
@@ -684,6 +1013,12 @@
 
         async function sendMessage(event) {
             event.preventDefault();
+
+            if (!isAuthenticated) {
+                showError("Необхідно авторизуватися");
+                return;
+            }
+
             const input = document.getElementById("messageText");
             const text = input.value.trim();
 
@@ -702,10 +1037,23 @@
                 input.focus();
 
             } catch (error) {
-                showError("Encryption error: " + error.message);
+                showError("Помилка шифрування: " + error.message);
                 console.error(error);
             }
         }
+
+        // Enter для відправки форм авторизації
+        document.getElementById("passwordInput").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                sendAuthorization();
+            }
+        });
+
+        document.getElementById("confirmPasswordInput").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                sendPasswordChange();
+            }
+        });
     </script>
 </body>
 </html>

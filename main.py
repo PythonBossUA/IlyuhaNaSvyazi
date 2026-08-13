@@ -2,17 +2,41 @@ import os
 import uuid
 import base64
 import asyncio
+from typing import Annotated
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status, Depends
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select, update, delete, insert
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from database import get_session
+from models import User
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from argon2 import PasswordHasher, Type
+from argon2.exceptions import (
+    HashingError,
+    InvalidHashError,
+    VerifyMismatchError,
+    VerificationError,
+)
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+DATABASE = Annotated[AsyncSession, Depends(get_session)]
+
+ph = PasswordHasher(
+    time_cost=3,
+    memory_cost=65536,
+    parallelism=1,
+    hash_len=32,
+    salt_len=16,
+    type=Type.ID,
+)
 
 ws_connections: dict[str, dict] = {}
 
@@ -144,6 +168,23 @@ async def broadcast_encrypted(
 
 
 # ============================================================
+# Password Hashers
+# ============================================================
+def hash_password(password: str) -> str:
+    try:
+        return ph.hash(password)
+    except HashingError as e:
+        raise ValueError(f"Не вдалося захешувати пароль: {e}")
+
+
+def verify_password(hashed_password: str, plain_password: str) -> bool:
+    try:
+        return ph.verify(hashed_password, plain_password)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
+
+
+# ============================================================
 # Routes
 # ============================================================
 
@@ -161,16 +202,16 @@ async def index(request: Request):
 
 
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id: str):
     await websocket.accept()
 
     client_public_json__task = None
     registered = False
 
     try:
-        """
-        ====== HANDSHAKE ======
-        """
+        # ============================================================
+        # HANDSHAKE
+        # ============================================================
         client_public_json__task = asyncio.create_task(websocket.receive_json())
 
         server_private_key = generate_private_key()
@@ -194,14 +235,162 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         client_public_key = import_public_jwk(client_public_jwk)
 
         salt = client_id.encode()
-        info = b"ilyuha_na_svyazi"
+        info = b"ilyuha-na-svyazi|v1|aes-gcm-256"
 
         server_aes_key = derive_aes_key(
             server_private_key, client_public_key, salt, info
         )
 
+        await websocket.send_json({"type": "handshake_ok"})
+
+        # ============================================================
+        # AUTHORIZATION
+        # ============================================================
+        """
+        receive {
+            "type": "authorization",
+            "login": "not-encrypted-login",
+            "password": "base64(encrypted-aeskey-password)"
+        }
+        """
+        authenticated = False
+        ws_user = None
+
+        while not authenticated:
+            auth_data = await asyncio.wait_for(websocket.receive_json(), timeout=120)
+
+            if not isinstance(auth_data, dict):
+                await websocket.send_json({
+                    "type": "auth_error",
+                    "message": "Невірний формат запиту"
+                })
+                continue
+
+            if frozenset(("type", "login", "password")) != auth_data.keys():
+                await websocket.send_json({
+                    "type": "auth_error",
+                    "message": "Невірний формат авторизації"
+                })
+                continue
+
+            if auth_data["type"] != "authorization":
+                await websocket.send_json({
+                    "type": "auth_error",
+                    "message": "Очікується тип \"authorization\""
+                })
+                continue
+
+            try:
+                raw_password = decrypt_text(
+                    packet=base64.b64decode(auth_data["password"]),
+                    key=server_aes_key,
+                    client_id=client_id,
+                )
+
+                ws_user = await database.scalar(
+                    select(User)
+                    .where(
+                        User.login == auth_data["login"]
+                    )
+                )
+
+                if not ws_user:
+                    await websocket.send_json({
+                        "type": "auth_error",
+                        "message": "Користувача не знайдено"
+                    })
+                    continue
+
+                if not verify_password(ws_user.hashed_password, raw_password):
+                    await websocket.send_json({
+                        "type": "auth_error",
+                        "message": "Невірний пароль"
+                    })
+                    continue
+
+                authenticated = True
+
+            except Exception:
+                await websocket.send_json({
+                    "type": "auth_error",
+                    "message": "Помилка обробки запиту"
+                })
+                continue
+
+        # ============================================================
+        # PASSWORD CHANGE
+        # ============================================================
+        if ws_user.require_password_change:
+            await websocket.send_json(
+                {
+                    "type": "need_password_change",
+                }
+            )
+
+            password_changed = False
+            while not password_changed:
+
+                """
+                receive {
+                    "type": "password_change",
+                    "new_password": "base64(encrypted-aeskey-password)"
+                }
+                """
+                change_data = await asyncio.wait_for(websocket.receive_json(), timeout=300)
+
+                if not isinstance(change_data, dict):
+                    await websocket.send_json({
+                        "type": "password_change_error",
+                        "message": "Невірний формат запиту"
+                    })
+                    continue
+
+                if frozenset(("type", "new_password")) != change_data.keys():
+                    await websocket.send_json({
+                        "type": "password_change_error",
+                        "message": "Невірний формат зміни пароля"
+                    })
+                    continue
+
+                if change_data["type"] != "password_change":
+                    await websocket.send_json({
+                        "type": "password_change_error",
+                        "message": "Очікується тип password_change"
+                    })
+                    continue
+
+                try:
+                    new_raw_password = decrypt_text(
+                        packet=base64.b64decode(change_data["new_password"]),
+                        key=server_aes_key,
+                        client_id=client_id,
+                    )
+
+                    await database.execute(
+                        update(User)
+                        .where(
+                            User.login == ws_user.login
+                        )
+                        .values(
+                            hashed_password=hash_password(new_raw_password),
+                            require_password_change=False
+                        )
+                    )
+                    await database.commit()
+                    password_changed = True
+
+                except Exception:
+                    await websocket.send_json({
+                        "type": "password_change_error",
+                        "message": "Помилка зміни пароля"
+                    })
+                    continue
+
+        # ============================================================
+        # REGISTRATION
+        # ============================================================
         old_ws = ws_connections.get(client_id)
-        if old_ws is not None:
+        if old_ws:
             old_connection = old_ws["ws"]
             if old_connection is not websocket:
                 try:
@@ -212,21 +401,23 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         ws_connections[client_id] = {"ws": websocket, "aes_key": server_aes_key}
         registered = True
 
-        await websocket.send_json({"type": "handshake_ok"})
-        """
-        ====== Success Handshake ======
-        """
-
-
+        await websocket.send_json(
+            {
+                "type": "auth_success",
+            }
+        )
 
         await broadcast_encrypted(
-            message=f"Client {client_id} connected",
+            message=f"Client {ws_user.login} connected",
             message_type="system_message",
             exclude_client_id=client_id,
             event="connected",
             source_client_id=client_id,
         )
 
+        # ============================================================
+        # WEBSOCKET CYCLE
+        # ============================================================
         while True:
             data = await websocket.receive_json()
 
@@ -239,10 +430,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             if not isinstance(data.get("data"), str):
                 raise ValueError("Invalid message data")
 
-            aes_key = ws_connections[client_id]["aes_key"]
-
             packet = base64.b64decode(data["data"])
-            message = decrypt_text(aes_key, packet, client_id)
+            message = decrypt_text(server_aes_key, packet, client_id)
 
             await broadcast_encrypted(
                 message=message,
