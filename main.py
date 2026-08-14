@@ -25,7 +25,7 @@ from argon2.exceptions import (
     VerificationError,
 )
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 templates = Jinja2Templates(directory="templates")
 DATABASE = Annotated[AsyncSession, Depends(get_session)]
 
@@ -260,24 +260,21 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             auth_data = await asyncio.wait_for(websocket.receive_json(), timeout=120)
 
             if not isinstance(auth_data, dict):
-                await websocket.send_json({
-                    "type": "auth_error",
-                    "message": "Невірний формат запиту"
-                })
+                await websocket.send_json(
+                    {"type": "auth_error", "message": "Невірний формат запиту"}
+                )
                 continue
 
             if frozenset(("type", "login", "password")) != auth_data.keys():
-                await websocket.send_json({
-                    "type": "auth_error",
-                    "message": "Невірний формат авторизації"
-                })
+                await websocket.send_json(
+                    {"type": "auth_error", "message": "Невірний формат авторизації"}
+                )
                 continue
 
             if auth_data["type"] != "authorization":
-                await websocket.send_json({
-                    "type": "auth_error",
-                    "message": "Очікується тип \"authorization\""
-                })
+                await websocket.send_json(
+                    {"type": "auth_error", "message": 'Очікується тип "authorization"'}
+                )
                 continue
 
             try:
@@ -288,33 +285,27 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                 )
 
                 ws_user = await database.scalar(
-                    select(User)
-                    .where(
-                        User.login == auth_data["login"]
-                    )
+                    select(User).where(User.login == auth_data["login"])
                 )
 
                 if not ws_user:
-                    await websocket.send_json({
-                        "type": "auth_error",
-                        "message": "Користувача не знайдено"
-                    })
+                    await websocket.send_json(
+                        {"type": "auth_error", "message": "Користувача не знайдено"}
+                    )
                     continue
 
                 if not verify_password(ws_user.hashed_password, raw_password):
-                    await websocket.send_json({
-                        "type": "auth_error",
-                        "message": "Невірний пароль"
-                    })
+                    await websocket.send_json(
+                        {"type": "auth_error", "message": "Невірний пароль"}
+                    )
                     continue
 
                 authenticated = True
 
             except Exception:
-                await websocket.send_json({
-                    "type": "auth_error",
-                    "message": "Помилка обробки запиту"
-                })
+                await websocket.send_json(
+                    {"type": "auth_error", "message": "Помилка обробки запиту"}
+                )
                 continue
 
         # ============================================================
@@ -336,27 +327,35 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                     "new_password": "base64(encrypted-aeskey-password)"
                 }
                 """
-                change_data = await asyncio.wait_for(websocket.receive_json(), timeout=300)
+                change_data = await asyncio.wait_for(
+                    websocket.receive_json(), timeout=300
+                )
 
                 if not isinstance(change_data, dict):
-                    await websocket.send_json({
-                        "type": "password_change_error",
-                        "message": "Невірний формат запиту"
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "password_change_error",
+                            "message": "Невірний формат запиту",
+                        }
+                    )
                     continue
 
                 if frozenset(("type", "new_password")) != change_data.keys():
-                    await websocket.send_json({
-                        "type": "password_change_error",
-                        "message": "Невірний формат зміни пароля"
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "password_change_error",
+                            "message": "Невірний формат зміни пароля",
+                        }
+                    )
                     continue
 
                 if change_data["type"] != "password_change":
-                    await websocket.send_json({
-                        "type": "password_change_error",
-                        "message": "Очікується тип password_change"
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "password_change_error",
+                            "message": "Очікується тип password_change",
+                        }
+                    )
                     continue
 
                 try:
@@ -368,22 +367,22 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
 
                     await database.execute(
                         update(User)
-                        .where(
-                            User.login == ws_user.login
-                        )
+                        .where(User.login == ws_user.login)
                         .values(
                             hashed_password=hash_password(new_raw_password),
-                            require_password_change=False
+                            require_password_change=False,
                         )
                     )
                     await database.commit()
                     password_changed = True
 
                 except Exception:
-                    await websocket.send_json({
-                        "type": "password_change_error",
-                        "message": "Помилка зміни пароля"
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "password_change_error",
+                            "message": "Помилка зміни пароля",
+                        }
+                    )
                     continue
 
         # ============================================================
