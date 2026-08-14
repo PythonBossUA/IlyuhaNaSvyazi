@@ -1,0 +1,669 @@
+/* ============================================================
+   «Ілюха на связі!» — матовий зернистий дизайн
+   Палітра: синій / фіолетовий / бордовий
+   Чат розтягується відносно ширини екрану (fluid)
+============================================================ */
+
+@property --angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+}
+
+:root {
+    --bg-0: #0a0812;
+    --bg-1: #110d1f;
+    --bg-2: #171230;
+
+    --ink: #edeaf8;
+    --ink-dim: #b3add0;
+    --ink-mute: #77719a;
+
+    --blue: #4f7dff;
+    --blue-deep: #2447c9;
+    --violet: #8b5cf6;
+    --violet-deep: #5b2ea6;
+    --bordeaux: #93264d;
+    --bordeaux-bright: #d15c86;
+
+    --ok: #6ea8ff;
+    --warn: #b48cff;
+    --err: #ff7d9c;
+
+    --line: rgba(139, 92, 246, .16);
+    --line-strong: rgba(139, 92, 246, .32);
+
+    --r-lg: 22px;
+    --r-md: 14px;
+
+    --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+    font-family: var(--font);
+    color: var(--ink);
+    background:
+        radial-gradient(1100px 700px at 88% 112%, rgba(147, 38, 77, .16), transparent 60%),
+        radial-gradient(900px 620px at -10% -12%, rgba(79, 125, 255, .14), transparent 55%),
+        radial-gradient(760px 520px at 50% 42%, rgba(139, 92, 246, .10), transparent 62%),
+        var(--bg-0);
+    overflow: hidden;
+}
+
+/* Зерниста текстура поверх усього інтерфейсу */
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    pointer-events: none;
+    opacity: .08;
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: rgba(139, 92, 246, .45); }
+
+.hidden { display: none !important; }
+
+:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* ============================================================
+   Фонові орби
+============================================================ */
+.orb {
+    position: fixed;
+    z-index: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(90px);
+    opacity: .38;
+    animation: drift 24s ease-in-out infinite alternate;
+}
+.orb--blue   { width: 46vw; height: 46vw; max-width: 580px; max-height: 580px; top: -12%; left: -14%;
+               background: radial-gradient(circle at 32% 32%, rgba(79, 125, 255, .6), transparent 66%); }
+.orb--violet { width: 40vw; height: 40vw; max-width: 520px; max-height: 520px; top: 16%; right: -16%;
+               background: radial-gradient(circle at 40% 40%, rgba(139, 92, 246, .55), transparent 66%);
+               animation-delay: -9s; }
+.orb--wine   { width: 44vw; height: 44vw; max-width: 560px; max-height: 560px; bottom: -20%; left: 28%;
+               background: radial-gradient(circle at 45% 45%, rgba(147, 38, 77, .55), transparent 66%);
+               animation-delay: -17s; }
+
+@keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(6vw, 4vh, 0) scale(1.18); }
+}
+
+@keyframes angle-spin { to { --angle: 360deg; } }
+
+/* ============================================================
+   Каркас чату (ширина — відносно екрану)
+============================================================ */
+.app {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+.app.locked { visibility: hidden; user-select: none; }
+
+.app.reveal > * { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; }
+.app.reveal > .app-bg-decor { animation-delay: 0s; }
+.app.reveal > .chat-header  { animation-delay: .02s; }
+.app.reveal > .messages     { animation-delay: .10s; }
+.app.reveal > .composer     { animation-delay: .18s; }
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Фонові фотографії Ілюхи (під кутом, майже прозорі)
+============================================================ */
+.app-bg-decor {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    /* М'яке віньєтування, щоб краї не обривалися різко */
+    mask-image: radial-gradient(ellipse at center, #000 45%, transparent 94%);
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 45%, transparent 94%);
+}
+
+.bg-photo {
+    position: absolute;
+    height: auto;
+    /* Матовий "привид": знебарвлення + легке розмиття.
+       screen — гарно світиться на темному фоні для PNG із прозорістю.
+       Якщо у ваших PNG БІЛИЙ фон — приберіть рядок mix-blend-mode. */
+    filter: grayscale(.35) contrast(1.05) blur(.6px);
+    mix-blend-mode: screen;
+    opacity: 0;                          /* приховані до авторизації */
+    transition: opacity 1.6s ease .3s;   /* плавно проявляються */
+    will-change: transform, opacity;
+}
+
+/* Повільний дрейф для фото 1 і 3 */
+@keyframes photo-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rot)); }
+    50%      { transform: translate3d(var(--dx, 10px), var(--dy, 8px), 0) rotate(var(--rot)); }
+}
+
+/* Фото 1 — верхній лівий кут, нахил вліво */
+.bg-photo--1 {
+    top: 4%;
+    left: -4%;
+    width: clamp(280px, 38vw, 460px);
+    --rot: -14deg;
+    --dx: 14px;
+    --dy: -10px;
+    --op: .08;
+    animation: photo-drift 28s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------
+   Фото 2 — ПОВЕРНУТЕ РІВНО НА 90°, НИЗОМ ПРИЛЯГАЄ ДО ПРАВОЇ ГРАНИЦІ.
+   Математика: ширина --w, висота H = --w * 1.12 (aspect-ratio).
+   Після rotate(-90deg) низ опиняється праворуч на відстані
+   (H - W) / 2 = --w * 0.06 від центру — тому right: calc(var(--w) * .06)
+   ставить низ ТОЧНО на праву границю. Адаптивність автоматична,
+   бо все рахується від --w.
+------------------------------------------------------------ */
+.bg-photo--2 {
+    --w: clamp(260px, 36vw, 440px);
+    --rot: -90deg;
+    --dx: 0px;          /* дрейф лише вздовж границі, щоб низ не відлипав */
+    --dy: 12px;
+    --op: .10;
+    width: var(--w);
+    aspect-ratio: 100 / 112;   /* нормалізуємо пропорції → точний розрахунок */
+    object-fit: cover;
+    top: 50%;
+    right: calc(var(--w) * 0.06);
+    animation: photo-drift-2 32s ease-in-out infinite -6s;
+}
+
+@keyframes photo-drift-2 {
+    0%, 100% { transform: translateY(-50%) translate3d(0, 0, 0) rotate(var(--rot)); }
+    50%      { transform: translateY(-50%) translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)); }
+}
+
+/* Фото 3 — знизу зліва, нахил вправо */
+.bg-photo--3 {
+    bottom: 6%;
+    left: 14%;
+    width: clamp(240px, 34vw, 420px);
+    --rot: 17deg;
+    --dx: 10px;
+    --dy: -12px;
+    --op: .09;
+    animation: photo-drift 26s ease-in-out infinite -13s;
+}
+
+/* Після успішної авторизації фото плавно проявляються */
+.app.reveal .bg-photo { opacity: var(--op, .09); }
+
+/* ---------- Шапка ---------- */
+.chat-header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 2vw, 24px);
+    padding: 12px clamp(14px, 4vw, 40px);
+    background: rgba(13, 10, 24, .68);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.brand-mark {
+    width: 38px; height: 38px;
+    flex: none;
+    border-radius: 12px;
+    padding: 2px;
+    background: conic-gradient(from var(--angle), var(--blue), var(--violet) 35%, var(--bordeaux) 65%, var(--blue));
+    animation: angle-spin 8s linear infinite;
+    position: relative;
+}
+.brand-mark::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 9px;
+    background: var(--bg-1);
+}
+
+.brand-text h1 {
+    font-size: clamp(1.02rem, 2.1vw, 1.3rem);
+    font-weight: 700;
+    letter-spacing: .01em;
+    background: linear-gradient(120deg, var(--blue), var(--violet) 55%, var(--bordeaux-bright));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    white-space: nowrap;
+}
+.brand-text p {
+    font-size: .7rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-top: 2px;
+}
+
+/* ---------- Статус ---------- */
+.header-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(17, 13, 31, .6);
+    font-size: .78rem;
+    color: var(--ink-dim);
+    white-space: nowrap;
+}
+.status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--warn);
+    animation: dot-pulse 1.6s ease-in-out infinite;
+}
+.status-dot.ok    { background: var(--ok);  animation: none; box-shadow: 0 0 10px rgba(110, 168, 255, .8); }
+.status-dot.error { background: var(--err); animation: none; box-shadow: 0 0 10px rgba(255, 125, 156, .6); }
+
+@keyframes dot-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .45; transform: scale(.8); }
+}
+
+.btn-ghost {
+    padding: 8px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-dim);
+    font: inherit;
+    font-size: .78rem;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, transform .2s;
+}
+.btn-ghost:hover { border-color: var(--blue); color: var(--ink); transform: translateY(-1px); }
+
+/* ---------- Повідомлення (поверх фонових фото) ---------- */
+.messages {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: clamp(14px, 3vw, 28px) clamp(14px, 4vw, 40px);
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, .3) transparent;
+}
+.messages::-webkit-scrollbar { width: 8px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, .28); border-radius: 4px; }
+.messages::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, .45); }
+
+.msg { display: flex; flex-direction: column; animation: msg-in .3s cubic-bezier(.2, .7, .2, 1); }
+.msg.out { align-items: flex-end; }
+.msg.in  { align-items: flex-start; }
+.msg.sys { align-items: center; }
+
+@keyframes msg-in {
+    from { opacity: 0; transform: translateY(10px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---------- Підпис автора повідомлення ---------- */
+.msg-author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 4px 4px;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+.msg-author::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ac, var(--violet));
+    box-shadow: 0 0 8px var(--ac, var(--violet));
+}
+/* Кольори учасників — із загальної палітри */
+.author-c0 { --ac: var(--blue); }
+.author-c1 { --ac: var(--violet); }
+.author-c2 { --ac: var(--bordeaux-bright); }
+.author-c3 { --ac: var(--ok); }
+.author-c4 { --ac: var(--warn); }
+
+.bubble {
+    max-width: min(74%, 680px);
+    padding: 11px 16px;
+    border-radius: 18px;
+    font-size: .95rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+.msg.in .bubble {
+    background: linear-gradient(150deg, rgba(139, 92, 246, .13), rgba(23, 18, 48, .72));
+    border: 1px solid rgba(139, 92, 246, .22);
+    border-bottom-left-radius: 6px;
+}
+.msg.out .bubble {
+    background: linear-gradient(140deg, #3b5be0, #6d47e6 62%, #8a3fd9);
+    border: 1px solid rgba(255, 255, 255, .08);
+    color: #f4f1ff;
+    border-bottom-right-radius: 6px;
+}
+.msg.sys .bubble {
+    max-width: 90%;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px dashed var(--line-strong);
+    background: rgba(17, 13, 31, .5);
+    color: var(--ink-mute);
+    font-size: .76rem;
+    letter-spacing: .02em;
+    text-align: center;
+}
+.msg.sys.ok   .bubble { color: var(--ok);   border-color: rgba(110, 168, 255, .4); }
+.msg.sys.err  .bubble { color: var(--err);  border-color: rgba(255, 125, 156, .4); }
+.msg.sys.warn .bubble { color: var(--warn); border-color: rgba(180, 140, 255, .4); }
+
+.msg-time { font-size: .68rem; color: var(--ink-mute); margin-top: 4px; padding-inline: 4px; }
+
+/* ---------- Композер (поверх фонових фото) ---------- */
+.composer {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 10px;
+    padding: 14px clamp(14px, 4vw, 40px) calc(14px + env(safe-area-inset-bottom));
+    background: rgba(13, 10, 24, .7);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+}
+
+.text-input {
+    width: 100%;
+    padding: 13px 17px;
+    border-radius: var(--r-md);
+    border: 1px solid rgba(139, 92, 246, .25);
+    background: rgba(11, 9, 18, .62);
+    color: var(--ink);
+    font: inherit;
+    font-size: .95rem;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.text-input::placeholder { color: var(--ink-mute); }
+.text-input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(79, 125, 255, .16);
+    background: rgba(11, 9, 18, .85);
+}
+.text-input:disabled { opacity: .5; cursor: not-allowed; }
+
+.composer .text-input { flex: 1; }
+
+#sendButton {
+    flex: none;
+    width: 50px; height: 50px;
+    border: none;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--blue-deep), var(--violet-deep) 60%, var(--bordeaux));
+    box-shadow: 0 6px 18px rgba(36, 71, 201, .35);
+    transition: transform .2s, box-shadow .2s, opacity .2s;
+}
+#sendButton:hover:not(:disabled) { transform: translateY(-2px) rotate(-8deg); box-shadow: 0 10px 24px rgba(91, 46, 166, .5); }
+#sendButton:active:not(:disabled) { transform: translateY(0); }
+#sendButton:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ============================================================
+   Оверлей авторизації
+============================================================ */
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 22px;
+    overflow-y: auto;
+    background:
+        radial-gradient(900px 600px at 12% -8%, rgba(79, 125, 255, .16), transparent 55%),
+        radial-gradient(800px 560px at 92% 108%, rgba(147, 38, 77, .18), transparent 60%),
+        radial-gradient(640px 460px at 50% 46%, rgba(139, 92, 246, .12), transparent 62%),
+        var(--bg-0);
+    transition: opacity .45s ease, visibility .45s ease;
+}
+.auth-overlay.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.auth-overlay.is-hidden .auth-card { transform: scale(.95) translateY(10px); opacity: 0; }
+
+/* Анімована конічна рамка */
+.auth-card {
+    width: min(92vw, 432px);
+    border-radius: 26px;
+    padding: 1.5px;
+    background: conic-gradient(from var(--angle), var(--blue), var(--violet) 30%, var(--bordeaux) 58%, var(--blue) 85%);
+    animation: angle-spin 9s linear infinite;
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .75), 0 0 46px rgba(139, 92, 246, .14);
+    transition: transform .45s ease, opacity .45s ease;
+}
+
+.auth-inner {
+    border-radius: 24.5px;
+    padding: clamp(26px, 5vh, 40px) clamp(22px, 4vw, 34px);
+    background: linear-gradient(165deg, #1a1440 0%, #130d26 52%, #180f2c 100%);
+    text-align: center;
+}
+
+/* Пульсуюча емблема */
+.auth-logo {
+    width: 54px; height: 54px;
+    margin: 0 auto 18px;
+    border-radius: 18px;
+    position: relative;
+    background: linear-gradient(135deg, var(--blue-deep), var(--violet-deep) 55%, var(--bordeaux));
+    box-shadow: 0 8px 24px rgba(91, 46, 166, .45);
+}
+.auth-logo::before,
+.auth-logo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgba(139, 92, 246, .55);
+    animation: ring 2.6s ease-out infinite;
+}
+.auth-logo::after { animation-delay: 1.3s; }
+
+@keyframes ring {
+    0%   { transform: scale(1);   opacity: .8; }
+    100% { transform: scale(1.9); opacity: 0; }
+}
+
+.auth-inner h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    background: linear-gradient(120deg, var(--blue), var(--violet) 55%, var(--bordeaux-bright));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+}
+.auth-sub { font-size: .78rem; color: var(--ink-mute); letter-spacing: .05em; margin-bottom: 24px; }
+
+.auth-form { text-align: left; }
+
+.field { margin-bottom: 14px; }
+.field label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: .7rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+}
+
+/* Помилка авторизації (бордо) */
+.auth-error {
+    display: none;
+    margin-bottom: 14px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(209, 92, 134, .45);
+    background: rgba(147, 38, 77, .16);
+    color: #ffb9cb;
+    font-size: .85rem;
+    line-height: 1.4;
+}
+.auth-error.visible { display: block; animation: shake .4s cubic-bezier(.36, .07, .19, .97); }
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+
+/* Головна кнопка */
+.btn-primary {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    margin-top: 6px;
+    padding: 14px;
+    border: none;
+    border-radius: var(--r-md);
+    color: #fff;
+    font: inherit;
+    font-size: .95rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--blue-deep), var(--violet-deep) 55%, var(--bordeaux));
+    box-shadow: 0 8px 22px rgba(36, 71, 201, .35);
+    transition: transform .2s, box-shadow .2s, opacity .2s;
+}
+.btn-primary::after {          /* блиск, що пробігає */
+    content: "";
+    position: absolute;
+    top: 0; left: -70%;
+    width: 45%; height: 100%;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, .22), transparent);
+    transform: skewX(-20deg);
+    transition: left .6s ease;
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(91, 46, 166, .5); }
+.btn-primary:hover:not(:disabled)::after { left: 120%; }
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-primary.loading { pointer-events: none; opacity: .8; }
+.btn-primary.loading::before {
+    content: "";
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 9px;
+    vertical-align: -2px;
+    border: 2px solid rgba(255, 255, 255, .35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   Toast
+============================================================ */
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    z-index: 80;
+    transform: translate(-50%, 18px);
+    max-width: min(92vw, 460px);
+    padding: 11px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: rgba(23, 18, 48, .92);
+    backdrop-filter: blur(10px);
+    color: var(--ink-dim);
+    font-size: .85rem;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s, transform .3s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err  { border-color: rgba(255, 125, 156, .5); color: #ffb9cb; }
+.toast.ok   { border-color: rgba(110, 168, 255, .5); color: #cfe0ff; }
+
+/* ============================================================
+   Адаптація
+============================================================ */
+@media (max-width: 720px) {
+    .brand-text p { display: none; }
+    .status { padding: 7px 11px; font-size: .72rem; }
+    .bubble { max-width: 88%; }
+    .bg-photo--1 { width: clamp(200px, 52vw, 300px); }
+    .bg-photo--2 { --w: clamp(200px, 52vw, 300px); --op: .08; }
+    .bg-photo--3 { width: clamp(170px, 46vw, 260px); }
+}
+
+@media (max-width: 480px) {
+    .chat-header { flex-wrap: wrap; row-gap: 8px; }
+    .header-right { margin-left: auto; }
+    .brand-mark { width: 32px; height: 32px; }
+    #sendButton { width: 46px; height: 46px; }
+}
+
+@media (max-height: 700px) {
+    .auth-logo { width: 44px; height: 44px; margin-bottom: 12px; }
+    .auth-sub { margin-bottom: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}

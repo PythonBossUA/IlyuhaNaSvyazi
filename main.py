@@ -6,6 +6,8 @@ from typing import Annotated
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status, Depends
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
 from sqlalchemy import select, update, delete, insert
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +28,9 @@ from argon2.exceptions import (
 )
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
 DATABASE = Annotated[AsyncSession, Depends(get_session)]
 
 ph = PasswordHasher(
@@ -142,29 +146,32 @@ async def broadcast_encrypted(
     exclude_client_id: str = None,
     event: str = None,
     source_client_id: str = None,
+    owner: str = None
 ):
+    coroutines = []
     for client_id, connection in list(ws_connections.items()):
         if client_id == exclude_client_id:
             continue
 
-        try:
-            encrypted = encrypt_text(connection["aes_key"], message, client_id)
+        encrypted = encrypt_text(connection["aes_key"], message, client_id)
 
-            payload = {
-                "type": message_type,
-                "data": base64.b64encode(encrypted).decode(),
-            }
+        payload = {
+            "type": message_type,
+            "data": base64.b64encode(encrypted).decode()
+        }
 
-            if message_type == "system_message":
-                if event is not None:
-                    payload["event"] = event
-                if source_client_id is not None:
-                    payload["client_id"] = source_client_id
+        if owner:
+            payload["owner"] = owner
 
-            await connection["ws"].send_json(payload)
+        if message_type == "system_message":
+            if event is not None:
+                payload["event"] = event
+            if source_client_id is not None:
+                payload["client_id"] = source_client_id
 
-        except Exception:
-            pass
+        coroutines.append(connection["ws"].send_json(payload))
+
+    await asyncio.gather(*coroutines, return_exceptions=True)
 
 
 # ============================================================
@@ -246,13 +253,6 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
         # ============================================================
         # AUTHORIZATION
         # ============================================================
-        """
-        receive {
-            "type": "authorization",
-            "login": "not-encrypted-login",
-            "password": "base64(encrypted-aeskey-password)"
-        }
-        """
         authenticated = False
         ws_user = None
 
@@ -320,13 +320,6 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
 
             password_changed = False
             while not password_changed:
-
-                """
-                receive {
-                    "type": "password_change",
-                    "new_password": "base64(encrypted-aeskey-password)"
-                }
-                """
                 change_data = await asyncio.wait_for(
                     websocket.receive_json(), timeout=300
                 )
@@ -397,7 +390,14 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                 except Exception:
                     pass
 
-        ws_connections[client_id] = {"ws": websocket, "aes_key": server_aes_key}
+        if next((ws_data for ws_data in ws_connections.values() if ws_data["login"] == ws_user.login), None):
+            try:
+                await websocket.close(code=1008, reason="User already registered")
+                return
+            except Exception:
+                pass
+
+        ws_connections[client_id] = {"ws": websocket, "aes_key": server_aes_key, "login": ws_user.login}
         registered = True
 
         await websocket.send_json(
@@ -436,6 +436,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                 message=message,
                 message_type="encrypted_message",
                 exclude_client_id=client_id,
+                owner=ws_user.login
             )
 
     except WebSocketDisconnect:
