@@ -27,7 +27,25 @@ from argon2.exceptions import (
     VerificationError,
 )
 
+
+class ForwardedProtoMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            for name, value in scope.get("headers", []):
+                if name == b"x-forwarded-proto":
+                    proto = value.decode("latin-1").split(",")[0].strip()
+                    if proto in ("http", "https"):
+                        scope = dict(scope)
+                        scope["scheme"] = proto
+                    break
+        await self.app(scope, receive, send)
+
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(ForwardedProtoMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
