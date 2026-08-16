@@ -152,8 +152,8 @@
     function showLoginForm() {
         loginForm.classList.remove("hidden");
         passwordChangeForm.classList.add("hidden");
-        authTitle.textContent = "Вхід до каналу";
-        authSub.textContent = "З'єднання захищене ECDH + AES-GCM";
+        authTitle.textContent = "Врата в чат";
+        authSub.textContent = "Ілюха шифрується алгоритмами ECDH + AES-GCM";
         hideAuthError();
         syncLoginButton();
         setTimeout(() => loginInput.focus(), 120);
@@ -162,8 +162,8 @@
     function showPasswordChangeForm() {
         loginForm.classList.add("hidden");
         passwordChangeForm.classList.remove("hidden");
-        authTitle.textContent = "Зміна пароля";
-        authSub.textContent = "Сервер вимагає оновити пароль";
+        authTitle.textContent = "Тре поміняти пароль";
+        authSub.textContent = "Бо Ілюха все бачив";
         hideAuthError();
         setTimeout(() => newPasswordInput.focus(), 120);
     }
@@ -381,9 +381,9 @@
         const newPassword = newPasswordInput.value;
         const confirmPassword = confirmPasswordInput.value;
 
-        if (!newPassword) return showAuthError("Введіть новий пароль");
-        if (newPassword.length < 6) return showAuthError("Пароль має бути не менше 6 символів");
-        if (newPassword !== confirmPassword) return showAuthError("Паролі не співпадають");
+        if (!newPassword) return showAuthError("Придумай пароль");
+        if (newPassword.length < 6) return showAuthError("Не МЕНШЕ 6 символів йой");
+        if (newPassword !== confirmPassword) return showAuthError("Паролі не співпадають дебыл");
         if (!aesKey) return showAuthError("Захищений канал ще не встановлено");
         if (pendingChange) return;
 
@@ -520,8 +520,8 @@
                     }
 
                     case "need_password_change": {
-                        setStatus("Оновіть пароль", "connect");
-                        toast("Сервер вимагає зміну пароля", "warn");
+                        setStatus("Тре поміняти пароль", "connect");
+                        toast("Бо Ілюха все бачив", "warn");
                         showPasswordChangeForm();
                         break;
                     }

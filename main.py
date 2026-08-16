@@ -386,13 +386,13 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
 
                 if not ws_user:
                     await websocket.send_json(
-                        {"type": "auth_error", "message": "Користувача не знайдено"}
+                        {"type": "auth_error", "message": "Кента не знайдено"}
                     )
                     continue
 
                 if not verify_password(ws_user.hashed_password, raw_password):
                     await websocket.send_json(
-                        {"type": "auth_error", "message": "Невірний пароль"}
+                        {"type": "auth_error", "message": "Хуйовий пароль"}
                     )
                     continue
 
@@ -495,7 +495,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             None,
         ):
             try:
-                await websocket.close(code=1008, reason="User already registered")
+                await websocket.close(code=1008, reason="Кабан вже зареєстрований в чаті")
                 return
             except Exception:
                 pass
@@ -527,7 +527,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
         )
 
         await broadcast_encrypted(
-            message=f"Client {ws_user.login} connected",
+            message=f"Кабан {ws_user.login} залетів в чат",
             message_type="system_message",
             exclude_client_id=client_id,
             event="connected",
@@ -618,7 +618,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
 
                 try:
                     await broadcast_encrypted(
-                        message=f"Client {client_id} disconnected",
+                        message=f"Кабан {ws_user.login if locals().get("ws_user") else client_id} с'їбався",
                         message_type="system_message",
                         exclude_client_id=client_id,
                         event="disconnected",
