@@ -1,7 +1,8 @@
 /* ============================================================
-   «Ілюха на связі!» — матовий зернистий дизайн
+   «Ілюха на зв'язку!» — матовий зернистий дизайн
    Палітра: синій / фіолетовий / бордовий
    Чат розтягується відносно ширини екрану (fluid)
+   Оновлено: 3D-картинки на екрані авторизації
 ============================================================ */
 
 @property --angle {
@@ -54,7 +55,6 @@ body {
     overflow: hidden;
 }
 
-/* Зерниста текстура поверх усього інтерфейсу */
 body::after {
     content: "";
     position: fixed;
@@ -105,7 +105,7 @@ body::after {
 @keyframes angle-spin { to { --angle: 360deg; } }
 
 /* ============================================================
-   Каркас чату (ширина — відносно екрану)
+   Каркас чату
 ============================================================ */
 .app {
     position: relative;
@@ -130,7 +130,7 @@ body::after {
 }
 
 /* ============================================================
-   Фонові фотографії Ілюхи (під кутом, майже прозорі)
+   Фонова фотографія в чаті (залишилась тільки bg-photo--3)
 ============================================================ */
 .app-bg-decor {
     position: absolute;
@@ -138,7 +138,6 @@ body::after {
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
-    /* М'яке віньєтування, щоб краї не обривалися різко */
     mask-image: radial-gradient(ellipse at center, #000 45%, transparent 94%);
     -webkit-mask-image: radial-gradient(ellipse at center, #000 45%, transparent 94%);
 }
@@ -146,59 +145,16 @@ body::after {
 .bg-photo {
     position: absolute;
     height: auto;
-    /* Матовий "привид": знебарвлення + легке розмиття.
-       screen — гарно світиться на темному фоні для PNG із прозорістю.
-       Якщо у ваших PNG БІЛИЙ фон — приберіть рядок mix-blend-mode. */
     filter: grayscale(.35) contrast(1.05) blur(.6px);
     mix-blend-mode: screen;
-    opacity: 0;                          /* приховані до авторизації */
-    transition: opacity 1.6s ease .3s;   /* плавно проявляються */
+    opacity: 0;
+    transition: opacity 1.6s ease .3s;
     will-change: transform, opacity;
 }
 
-/* Повільний дрейф для фото 1 і 3 */
 @keyframes photo-drift {
     0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rot)); }
     50%      { transform: translate3d(var(--dx, 10px), var(--dy, 8px), 0) rotate(var(--rot)); }
-}
-
-/* Фото 1 — верхній лівий кут, нахил вліво */
-.bg-photo--1 {
-    top: 4%;
-    left: -4%;
-    width: clamp(280px, 38vw, 460px);
-    --rot: -14deg;
-    --dx: 14px;
-    --dy: -10px;
-    --op: .08;
-    animation: photo-drift 28s ease-in-out infinite;
-}
-
-/* ------------------------------------------------------------
-   Фото 2 — ПОВЕРНУТЕ РІВНО НА 90°, НИЗОМ ПРИЛЯГАЄ ДО ПРАВОЇ ГРАНИЦІ.
-   Математика: ширина --w, висота H = --w * 1.12 (aspect-ratio).
-   Після rotate(-90deg) низ опиняється праворуч на відстані
-   (H - W) / 2 = --w * 0.06 від центру — тому right: calc(var(--w) * .06)
-   ставить низ ТОЧНО на праву границю. Адаптивність автоматична,
-   бо все рахується від --w.
------------------------------------------------------------- */
-.bg-photo--2 {
-    --w: clamp(260px, 36vw, 440px);
-    --rot: -90deg;
-    --dx: 0px;          /* дрейф лише вздовж границі, щоб низ не відлипав */
-    --dy: 12px;
-    --op: .10;
-    width: var(--w);
-    aspect-ratio: 100 / 112;   /* нормалізуємо пропорції → точний розрахунок */
-    object-fit: cover;
-    top: 50%;
-    right: calc(var(--w) * 0.06);
-    animation: photo-drift-2 32s ease-in-out infinite -6s;
-}
-
-@keyframes photo-drift-2 {
-    0%, 100% { transform: translateY(-50%) translate3d(0, 0, 0) rotate(var(--rot)); }
-    50%      { transform: translateY(-50%) translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)); }
 }
 
 /* Фото 3 — знизу зліва, нахил вправо */
@@ -213,8 +169,7 @@ body::after {
     animation: photo-drift 26s ease-in-out infinite -13s;
 }
 
-/* Після успішної авторизації фото плавно проявляються */
-.app.reveal .bg-photo { opacity: var(--op, .09); }
+.app.reveal .bg-photo--3 { opacity: var(--op, .09); }
 
 /* ---------- Шапка ---------- */
 .chat-header {
@@ -267,7 +222,6 @@ body::after {
     margin-top: 2px;
 }
 
-/* ---------- Статус ---------- */
 .header-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
 .status {
@@ -309,7 +263,7 @@ body::after {
 }
 .btn-ghost:hover { border-color: var(--blue); color: var(--ink); transform: translateY(-1px); }
 
-/* ---------- Повідомлення (поверх фонових фото) ---------- */
+/* ---------- Повідомлення ---------- */
 .messages {
     position: relative;
     z-index: 1;
@@ -334,12 +288,18 @@ body::after {
 .msg.in  { align-items: flex-start; }
 .msg.sys { align-items: center; }
 
+/* Вимкнення анімації для повідомлень з історії */
+.msg.msg-no-anim,
+.msg.msg-no-anim .bubble,
+.msg.msg-no-anim .msg-author {
+    animation: none !important;
+}
+
 @keyframes msg-in {
     from { opacity: 0; transform: translateY(10px) scale(.97); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ---------- Підпис автора повідомлення ---------- */
 .msg-author {
     display: flex;
     align-items: center;
@@ -358,7 +318,6 @@ body::after {
     background: var(--ac, var(--violet));
     box-shadow: 0 0 8px var(--ac, var(--violet));
 }
-/* Кольори учасників — із загальної палітри */
 .author-c0 { --ac: var(--blue); }
 .author-c1 { --ac: var(--violet); }
 .author-c2 { --ac: var(--bordeaux-bright); }
@@ -402,7 +361,7 @@ body::after {
 
 .msg-time { font-size: .68rem; color: var(--ink-mute); margin-top: 4px; padding-inline: 4px; }
 
-/* ---------- Композер (поверх фонових фото) ---------- */
+/* ---------- Композер ---------- */
 .composer {
     position: relative;
     z-index: 2;
@@ -455,7 +414,7 @@ body::after {
 #sendButton:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ============================================================
-   Оверлей авторизації
+   Оверлей авторизації + 3D-картинки
 ============================================================ */
 .auth-overlay {
     position: fixed;
@@ -465,6 +424,9 @@ body::after {
     place-items: center;
     padding: 22px;
     overflow-y: auto;
+    /* Перспектива для 3D-ефекту картинок */
+    perspective: 1200px;
+    perspective-origin: 50% 50%;
     background:
         radial-gradient(900px 600px at 12% -8%, rgba(79, 125, 255, .16), transparent 55%),
         radial-gradient(800px 560px at 92% 108%, rgba(147, 38, 77, .18), transparent 60%),
@@ -484,6 +446,8 @@ body::after {
     animation: angle-spin 9s linear infinite;
     box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .75), 0 0 46px rgba(139, 92, 246, .14);
     transition: transform .45s ease, opacity .45s ease;
+    position: relative;
+    z-index: 2;
 }
 
 .auth-inner {
@@ -493,7 +457,6 @@ body::after {
     text-align: center;
 }
 
-/* Пульсуюча емблема */
 .auth-logo {
     width: 54px; height: 54px;
     margin: 0 auto 18px;
@@ -541,7 +504,6 @@ body::after {
     color: var(--ink-mute);
 }
 
-/* Помилка авторизації (бордо) */
 .auth-error {
     display: none;
     margin-bottom: 14px;
@@ -563,7 +525,6 @@ body::after {
     80% { transform: translateX(4px); }
 }
 
-/* Головна кнопка */
 .btn-primary {
     position: relative;
     overflow: hidden;
@@ -582,7 +543,7 @@ body::after {
     box-shadow: 0 8px 22px rgba(36, 71, 201, .35);
     transition: transform .2s, box-shadow .2s, opacity .2s;
 }
-.btn-primary::after {          /* блиск, що пробігає */
+.btn-primary::after {
     content: "";
     position: absolute;
     top: 0; left: -70%;
@@ -611,40 +572,149 @@ body::after {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================================
-   Toast
+   3D-картинки на екрані авторизації
+   Ліва (ilyuha1) — нижче, права (ilyuha2) — вище
+   Матові рамки + плавний 3D-ефект
 ============================================================ */
-.toast {
-    position: fixed;
-    left: 50%;
-    bottom: 26px;
-    z-index: 80;
-    transform: translate(-50%, 18px);
-    max-width: min(92vw, 460px);
-    padding: 11px 18px;
-    border-radius: 12px;
-    border: 1px solid var(--line-strong);
-    background: rgba(23, 18, 48, .92);
-    backdrop-filter: blur(10px);
-    color: var(--ink-dim);
-    font-size: .85rem;
-    text-align: center;
+
+.auth-photo {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+
+    /* Матова рамка */
+    padding: 8px;
+    border-radius: 24px;
+    border: 1px solid rgba(139, 92, 246, .22);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(139, 92, 246, .10) 0%,
+            rgba(79, 125, 255, .08) 50%,
+            rgba(147, 38, 77, .10) 100%
+        );
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
+
+    /* Внутрішнє світло + зовнішня тінь */
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, .04) inset,
+        0 20px 50px -15px rgba(0, 0, 0, .55),
+        0 0 40px rgba(139, 92, 246, .18);
+
+    /* Плавна поява */
+    opacity: 0;
+    transform: translateZ(0);
+    transition: opacity .8s cubic-bezier(.2, .7, .2, 1);
+
+    transform-style: preserve-3d;
+    will-change: transform, opacity;
+}
+
+.auth-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: grayscale(.15) contrast(1.05);
+    border-radius: 18px;
+    -webkit-user-drag: none;
+}
+
+/* Коли оверлей видимий — картинки з'являються */
+.auth-overlay:not(.is-hidden) .auth-photo {
+    opacity: 1;
+}
+
+/* Коли оверлей прихований — картинки зникають */
+.auth-overlay.is-hidden .auth-photo {
     opacity: 0;
     pointer-events: none;
-    transition: opacity .3s, transform .3s;
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
-.toast.err  { border-color: rgba(255, 125, 156, .5); color: #ffb9cb; }
-.toast.ok   { border-color: rgba(110, 168, 255, .5); color: #cfe0ff; }
 
-/* ============================================================
-   Адаптація
-============================================================ */
+/* Ліва картинка (ilyuha1) — НИЖЧЕ, нахил вправо */
+.auth-photo--left {
+    left: clamp(10px, 4vw, 80px);
+    top: 58%;
+    width: clamp(180px, 22vw, 300px);
+    transform:
+        rotateY(-12deg)
+        rotateZ(-4deg)
+        translateZ(30px);
+    animation: photo-float-left 9s ease-in-out infinite;
+}
+
+@keyframes photo-float-left {
+    0%, 100% {
+        transform:
+            rotateY(-12deg)
+            rotateZ(-4deg)
+            translateZ(30px)
+            translateY(0);
+    }
+    50% {
+        transform:
+            rotateY(-8deg)
+            rotateZ(-3deg)
+            translateZ(50px)
+            translateY(-14px);
+    }
+}
+
+/* Права картинка (ilyuha2) — ВИЩЕ, нахил вліво */
+.auth-photo--right {
+    right: clamp(10px, 4vw, 80px);
+    top: 22%;
+    width: clamp(180px, 22vw, 300px);
+    transform:
+        rotateY(12deg)
+        rotateZ(4deg)
+        translateZ(40px);
+    animation: photo-float-right 11s ease-in-out infinite;
+}
+
+@keyframes photo-float-right {
+    0%, 100% {
+        transform:
+            rotateY(12deg)
+            rotateZ(4deg)
+            translateZ(40px)
+            translateY(0);
+    }
+    50% {
+        transform:
+            rotateY(8deg)
+            rotateZ(3deg)
+            translateZ(60px)
+            translateY(16px);
+    }
+}
+
+/* ---------- Адаптація 3D-картинок ---------- */
+@media (max-width: 1100px) {
+    .auth-photo--left  { width: clamp(150px, 18vw, 240px); top: 62%; }
+    .auth-photo--right { width: clamp(150px, 18vw, 240px); top: 18%; }
+}
+
 @media (max-width: 720px) {
-    .brand-text p { display: none; }
-    .status { padding: 7px 11px; font-size: .72rem; }
-    .bubble { max-width: 88%; }
-    .bg-photo--1 { width: clamp(200px, 52vw, 300px); }
-    .bg-photo--2 { --w: clamp(200px, 52vw, 300px); --op: .08; }
+    .auth-photo {
+        border-radius: 18px;
+        padding: 6px;
+    }
+    .auth-photo--left {
+        left: -20px;
+        top: 68%;
+        width: clamp(120px, 30vw, 180px);
+        transform: rotateY(-8deg) rotateZ(-3deg) translateZ(10px);
+    }
+    .auth-photo--right {
+        right: -20px;
+        top: 12%;
+        width: clamp(120px, 30vw, 180px);
+        transform: rotateY(8deg) rotateZ(3deg) translateZ(10px);
+    }
     .bg-photo--3 { width: clamp(170px, 46vw, 260px); }
 }
 
@@ -653,6 +723,13 @@ body::after {
     .header-right { margin-left: auto; }
     .brand-mark { width: 32px; height: 32px; }
     #sendButton { width: 46px; height: 46px; }
+}
+
+@media (max-width: 420px) {
+    .auth-photo--left  { left: -40px; opacity: .7; }
+    .auth-photo--right { right: -40px; opacity: .7; }
+    .auth-photo--left,
+    .auth-photo--right { width: clamp(110px, 34vw, 160px); }
 }
 
 @media (max-height: 700px) {
@@ -665,5 +742,9 @@ body::after {
         animation-duration: .01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: .01ms !important;
+    }
+    .auth-photo {
+        animation: none !important;
+        transform: none !important;
     }
 }

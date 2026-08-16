@@ -1,102 +1,122 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0a0812">
-    <title>Ілюха на связі!</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0812">
+  <title>Ілюха на связі!</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
 </head>
 <body data-client-id="{{ client_id }}">
 
-    <!-- Анімовані орби фону -->
-    <div class="orb orb--blue" aria-hidden="true"></div>
-    <div class="orb orb--violet" aria-hidden="true"></div>
-    <div class="orb orb--wine" aria-hidden="true"></div>
+<!-- Анімовані орби фону -->
+<div class="orb orb--blue" aria-hidden="true"></div>
+<div class="orb orb--violet" aria-hidden="true"></div>
+<div class="orb orb--wine" aria-hidden="true"></div>
 
-    <!-- ============ ЧАТ (прихований до авторизації) ============ -->
-    <main class="app locked" id="app">
+<!-- ============ ЧАТ (прихований до авторизації) ============ -->
+<main class="app locked" id="app">
 
-        <!-- Фонові фотографії Ілюхи: під кутом, напівпрозорі -->
-        <div class="app-bg-decor" aria-hidden="true">
-            <img src="{{ url_for('static', path='img/ilyuha-1.png') }}" class="bg-photo bg-photo--1" alt="">
-            <img src="{{ url_for('static', path='img/ilyuha-2.png') }}" class="bg-photo bg-photo--2" alt="">
-            <img src="{{ url_for('static', path='img/ilyuha-3.png') }}" class="bg-photo bg-photo--3" alt="">
-        </div>
+  <!-- Фонові фотографії Ілюхи: під кутом, напівпрозорі -->
+  <div class="app-bg-decor">
+    <img class="bg-photo bg-photo--3" src="{{ url_for('static', path='img/ilyuha-3.png') }}" alt="" draggable="false">
+  </div>
 
-        <header class="chat-header">
-            <div class="brand">
-                <span class="brand-mark" aria-hidden="true"></span>
-                <div class="brand-text">
-                    <h1>Ілюха на связі!</h1>
-                    <p>ECDH + AES-GCM · захищений канал</p>
-                </div>
-            </div>
-
-            <div class="header-right">
-                <div class="status" id="status">
-                    <span class="status-dot" id="statusDot"></span>
-                    <span id="statusText">Підключення…</span>
-                </div>
-                <button class="btn-ghost hidden" id="reconnectBtn" type="button">↺ Перепідключити</button>
-            </div>
-        </header>
-
-        <section class="messages" id="messages" aria-live="polite"></section>
-
-        <form class="composer" id="composerForm">
-            <input class="text-input" type="text" id="messageText"
-                   placeholder="Напишіть повідомлення…" autocomplete="off" disabled>
-            <button id="sendButton" type="submit" disabled aria-label="Надіслати">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-                    <path d="M2.4 20.6 21.5 12 2.4 3.4l2.8 7.2L15 12 5.2 13.4l-2.8 7.2Z"/>
-                </svg>
-            </button>
-        </form>
-    </main>
-
-    <!-- ============ ОВЕРЛЕЙ АВТОРИЗАЦІЇ ============ -->
-    <div class="auth-overlay" id="authOverlay">
-        <div class="auth-card">
-            <div class="auth-inner">
-                <div class="auth-logo" aria-hidden="true"></div>
-                <h2 id="authTitle">Вхід до каналу</h2>
-                <p class="auth-sub" id="authSub">З'єднання захищене ECDH + AES-GCM</p>
-
-                <div class="auth-error" id="authError" role="alert"></div>
-
-                <!-- Форма входу -->
-                <form id="loginForm" class="auth-form" novalidate>
-                    <div class="field">
-                        <label for="loginInput">Логін</label>
-                        <input class="text-input" type="text" id="loginInput" autocomplete="username">
-                    </div>
-                    <div class="field">
-                        <label for="passwordInput">Пароль</label>
-                        <input class="text-input" type="password" id="passwordInput" autocomplete="current-password">
-                    </div>
-                    <button class="btn-primary" id="loginButton" type="submit" disabled>Увійти</button>
-                </form>
-
-                <!-- Форма зміни пароля -->
-                <form id="passwordChangeForm" class="auth-form hidden" novalidate>
-                    <div class="field">
-                        <label for="newPasswordInput">Новий пароль</label>
-                        <input class="text-input" type="password" id="newPasswordInput" autocomplete="new-password">
-                    </div>
-                    <div class="field">
-                        <label for="confirmPasswordInput">Підтвердіть пароль</label>
-                        <input class="text-input" type="password" id="confirmPasswordInput" autocomplete="new-password">
-                    </div>
-                    <button class="btn-primary" id="changePasswordButton" type="submit">Змінити пароль</button>
-                </form>
-            </div>
-        </div>
+  <header class="chat-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <h1>Ілюха на связі!</h1>
+        <p>ECDH + AES-GCM · захищений канал</p>
+      </div>
     </div>
 
-    <div class="toast" id="toast" role="status"></div>
+    <div class="header-right">
+      <div class="status" id="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Підключення…</span>
+      </div>
+      <button class="btn-ghost hidden" id="reconnectBtn" type="button">↺ Перепідключити</button>
+    </div>
+  </header>
 
-    <script src="{{ url_for('static', path='js/crypto.js') }}" defer></script>
-    <script src="{{ url_for('static', path='js/app.js') }}" defer></script>
+  <section class="messages" id="messages" aria-live="polite"></section>
+
+  <form class="composer" id="composerForm">
+    <input class="text-input" type="text" id="messageText"
+           placeholder="Напишіть повідомлення…" autocomplete="off" disabled>
+    <button id="sendButton" type="submit" disabled aria-label="Надіслати">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+        <path d="M2.4 20.6 21.5 12 2.4 3.4l2.8 7.2L15 12 5.2 13.4l-2.8 7.2Z"/>
+      </svg>
+    </button>
+  </form>
+</main>
+
+<!-- ============ ОВЕРЛЕЙ АВТОРИЗАЦІЇ ============ -->
+<!-- ============================================================
+ ОВЕРЛЕЙ АВТОРИЗАЦІЇ — додано 3D-картинки
+============================================================ -->
+<div class="auth-overlay" id="authOverlay">
+
+  <!-- ★ 3D-картинки по боках від картки авторизації -->
+  <div class="auth-photo auth-photo--left">
+    <img src="{{ url_for('static', path='img/ilyuha-1.png') }}" alt="" draggable="false">
+  </div>
+  <div class="auth-photo auth-photo--right">
+    <img src="{{ url_for('static', path='img/ilyuha-2.png') }}" alt="" draggable="false">
+  </div>
+
+  <!-- Картка авторизації (без змін) -->
+  <div class="auth-card">
+    <div class="auth-inner">
+      <div class="auth-logo"></div>
+      <h2 id="authTitle">Вхід до каналу</h2>
+      <p class="auth-sub" id="authSub">З'єднання захищене ECDH + AES-GCM</p>
+
+      <div class="auth-error" id="authError"></div>
+
+      <!-- Форма входу -->
+      <form class="auth-form" id="loginForm" autocomplete="off">
+        <div class="field">
+          <label for="loginInput">Логін</label>
+          <input class="text-input" type="text" id="loginInput"
+                 placeholder="Ваш логін" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="passwordInput">Пароль</label>
+          <input class="text-input" type="password" id="passwordInput"
+                 placeholder="Ваш пароль" autocomplete="current-password" required>
+        </div>
+        <button class="btn-primary" type="submit" id="loginButton" disabled>
+          Увійти
+        </button>
+      </form>
+
+      <!-- Форма зміни пароля -->
+      <form class="auth-form hidden" id="passwordChangeForm" autocomplete="off">
+        <div class="field">
+          <label for="newPasswordInput">Новий пароль</label>
+          <input class="text-input" type="password" id="newPasswordInput"
+                 placeholder="Мінімум 6 символів" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label for="confirmPasswordInput">Підтвердження</label>
+          <input class="text-input" type="password" id="confirmPasswordInput"
+                 placeholder="Повторіть пароль" autocomplete="new-password" required>
+        </div>
+        <button class="btn-primary" type="submit" id="changePasswordButton" disabled>
+          Змінити пароль
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="{{ url_for('static', path='js/crypto.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/app.js') }}" defer></script>
 </body>
 </html>
