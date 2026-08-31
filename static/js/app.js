@@ -87,7 +87,7 @@
     }
 
     function getTimeString() {
-        return new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+        return new Date().toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"});
     }
 
     function authorColorClass(name) {
@@ -147,7 +147,9 @@
         sendButton.disabled = !enabled;
     }
 
-    function syncLoginButton() { loginButton.disabled = !aesKey || pendingAuth; }
+    function syncLoginButton() {
+        loginButton.disabled = !aesKey || pendingAuth;
+    }
 
     function showLoginForm() {
         loginForm.classList.remove("hidden");
@@ -168,10 +170,23 @@
         setTimeout(() => newPasswordInput.focus(), 120);
     }
 
-    function showOverlay() { authOverlay.classList.remove("is-hidden"); }
-    function hideOverlay() { authOverlay.classList.add("is-hidden"); }
-    function lockApp()     { app.classList.add("locked");    app.classList.remove("reveal"); }
-    function unlockApp()   { app.classList.remove("locked"); app.classList.add("reveal");    }
+    function showOverlay() {
+        authOverlay.classList.remove("is-hidden");
+    }
+
+    function hideOverlay() {
+        authOverlay.classList.add("is-hidden");
+    }
+
+    function lockApp() {
+        app.classList.add("locked");
+        app.classList.remove("reveal");
+    }
+
+    function unlockApp() {
+        app.classList.remove("locked");
+        app.classList.add("reveal");
+    }
 
     function clearAllInputs() {
         loginInput.value = "";
@@ -191,13 +206,15 @@
             if (isNaN(date.getTime())) return "";
             const today = new Date();
             if (date.toDateString() === today.toDateString()) {
-                return date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+                return date.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"});
             }
             return date.toLocaleString("uk-UA", {
                 day: "2-digit", month: "2-digit",
                 hour: "2-digit", minute: "2-digit"
             });
-        } catch { return ""; }
+        } catch {
+            return "";
+        }
     }
 
     async function renderHistoryMessage(item) {
@@ -228,13 +245,6 @@
         return wrap;
     }
 
-    /**
-     * Первинне завантаження історії після auth_success.
-     * ★ КЛЮЧОВЕ: тимчасово вимикаємо scroll-behavior: smooth,
-     *   щоб scrollTop встановився МИТТЄВО без анімації.
-     *   Анімований скрол проходив через малі значення scrollTop
-     *   і тригерив scroll listener → подвійна підгрузка.
-     */
     async function loadInitialMessages(items) {
         const reversed = [...items].reverse();
         const fragment = document.createDocumentFragment();
@@ -250,15 +260,12 @@
             if (el) fragment.appendChild(el);
         }
 
-        // ★ Вимикаємо smooth scroll для миттєвого позиціонування
         const prevBehavior = messagesEl.style.scrollBehavior;
         messagesEl.style.scrollBehavior = "auto";
 
         messagesEl.appendChild(fragment);
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        // Повертаємо smooth scroll після стабілізації DOM
-        // (подвійний rAF гарантує що браузер завершив layout)
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 messagesEl.style.scrollBehavior = prevBehavior;
@@ -266,13 +273,9 @@
         });
     }
 
-    /**
-     * Додає старіші повідомлення ЗВЕРХУ зі збереженням позиції скролу.
-     * Також вимикає smooth scroll під час корекції scrollTop.
-     */
     async function prependOlderMessages(items) {
         const oldScrollHeight = messagesEl.scrollHeight;
-        const oldScrollTop    = messagesEl.scrollTop;
+        const oldScrollTop = messagesEl.scrollTop;
 
         const rendered = await Promise.all(
             items.map(it => renderHistoryMessage(it).catch(err => {
@@ -289,7 +292,6 @@
 
         if (!fragment.childNodes.length) return;
 
-        // ★ Вимикаємо smooth scroll для миттєвої корекції позиції
         const prevBehavior = messagesEl.style.scrollBehavior;
         messagesEl.style.scrollBehavior = "auto";
 
@@ -303,10 +305,6 @@
         });
     }
 
-    /**
-     * Запит на підвантаження старих повідомлень.
-     * Повністю непомітний для користувача.
-     */
     function requestOlderMessages() {
         if (isLoadingMessages || !hasMoreMessages || !isAuthenticated) return;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -314,7 +312,7 @@
         isLoadingMessages = true;
 
         try {
-            ws.send(JSON.stringify({ type: "load_encrypted_messages" }));
+            ws.send(JSON.stringify({type: "load_encrypted_messages"}));
         } catch (err) {
             console.error(err);
             isLoadingMessages = false;
@@ -322,8 +320,7 @@
     }
 
     // ============================================================
-    // Scroll listener — БЕЗ таймера, захист через вимкнення
-    // smooth scroll під час init
+    // Scroll listener
     // ============================================================
     messagesEl.addEventListener("scroll", () => {
         if (scrollTick) return;
@@ -337,7 +334,7 @@
                 requestOlderMessages();
             }
         });
-    }, { passive: true });
+    }, {passive: true});
 
     // ============================================================
     // Авторизація / зміна пароля
@@ -418,7 +415,7 @@
         try {
             const encryptedData = await IlyuhaCrypto.encryptText(aesKey, text, clientId);
 
-            ws.send(JSON.stringify({ type: "encrypted_message", data: encryptedData }));
+            ws.send(JSON.stringify({type: "encrypted_message", data: encryptedData}));
             addMessage(text, "out");
             messageText.value = "";
             messageText.focus();
@@ -428,7 +425,9 @@
         }
     });
 
-    reconnectBtn.addEventListener("click", () => { connect(); });
+    reconnectBtn.addEventListener("click", () => {
+        connect();
+    });
 
     window.addEventListener("beforeunload", (e) => {
         if (pendingAuth || pendingChange) {
@@ -445,7 +444,10 @@
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             const old = ws;
             ws = null;
-            try { old.close(1000); } catch (_) { /* ignore */ }
+            try {
+                old.close(1000);
+            } catch (_) { /* ignore */
+            }
         }
 
         aesKey = null;
@@ -474,7 +476,7 @@
             try {
                 myKeyPair = await IlyuhaCrypto.generateKeyPair();
                 const jwk = await IlyuhaCrypto.exportPublicJwk(myKeyPair);
-                ws.send(JSON.stringify({ type: "public_key", jwk }));
+                ws.send(JSON.stringify({type: "public_key", jwk}));
             } catch (err) {
                 console.error(err);
                 setStatus("Помилка генерації ключів", "error");
@@ -519,6 +521,24 @@
                         break;
                     }
 
+                    // ★ НОВИЙ: сервер шле JSON замість close(1008)
+                    case "user_already_authorized": {
+                        pendingAuth = false;
+                        pendingChange = false;
+                        setLoading(loginButton, false);
+                        setLoading(changePasswordButton, false);
+                        syncLoginButton();
+                        showAuthError(msg.message || "Користувач вже авторизований");
+                        setStatus("Вже в мережі", "error");
+                        toast(msg.message || "Кабан вже зареєстрований в чаті", "err");
+
+                        // Закриваємо з'єднання з клієнта
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.close(4000, "user_already_authorized");
+                        }
+                        break;
+                    }
+
                     case "need_password_change": {
                         setStatus("Тре поміняти пароль", "connect");
                         toast("Бо Ілюха все бачив", "warn");
@@ -557,9 +577,6 @@
                             toast("Поки що немає повідомлень", "info");
                         }
 
-                        // Якщо контент не заповнив екран — довантажуємо автоматично.
-                        // Безпечно: smooth scroll вимкнено під час init,
-                        // тому scroll listener не тригериться хибно.
                         requestAnimationFrame(() => {
                             requestAnimationFrame(() => {
                                 if (hasMoreMessages && messagesEl.scrollHeight <= messagesEl.clientHeight + 50) {
@@ -583,7 +600,6 @@
                                 console.error("Помилка prepend:", err);
                             }
 
-                            // Якщо контент досі не заповнив екран — довантажуємо далі
                             requestAnimationFrame(() => {
                                 requestAnimationFrame(() => {
                                     if (hasMoreMessages && messagesEl.scrollHeight <= messagesEl.clientHeight + 50) {
@@ -628,8 +644,8 @@
                         try {
                             const plaintext = await IlyuhaCrypto.decryptText(aesKey, msg.data, clientId);
                             const kind = msg.event === "connected" ? "ok"
-                                       : msg.event === "disconnected" ? "err"
-                                       : "info";
+                                : msg.event === "disconnected" ? "err"
+                                    : "info";
                             addSystem(plaintext, kind);
                         } catch (_) {
                             toast("Не вдалося розшифрувати системне повідомлення", "err");
@@ -660,6 +676,10 @@
         ws.onclose = (event) => {
             if (event.target !== ws) return;
 
+            // ★ Зберігаємо поточну помилку авторизації ДО очищення
+            const currentAuthError = authError.textContent;
+            const hasAuthError = authError.classList.contains("visible");
+
             isAuthenticated = false;
             aesKey = null;
             myKeyPair = null;
@@ -680,16 +700,28 @@
 
             lockApp();
             showOverlay();
+            // showLoginForm() викликає hideAuthError() — тому зберігаємо помилку заздалегідь
             showLoginForm();
 
+            // ★ Відновлюємо помилку авторизації, якщо вона була показана до закриття
+            if (hasAuthError && currentAuthError) {
+                showAuthError(currentAuthError);
+            }
+
             if (event.code === 1008) {
-                showAuthError("Сесію відхилено (1008): користувач вже в мережі з іншої сесії або порушено політику.");
+                showAuthError("Сесію відхилено сервером (код 1008). Спробуйте інший логін або зверніться до адміна.");
                 toast("З'єднання закрито сервером (1008)", "err");
             } else if (!event.wasClean) {
-                showAuthError("З'єднання втрачено. Натисніть «Перепідключити».");
+                // ★ Не перезаписуємо помилку якщо вона вже показана
+                if (!hasAuthError) {
+                    showAuthError("З'єднання втрачено. Натисніть «Перепідключити».");
+                }
                 toast("З'єднання втрачено", "err");
             } else {
-                toast("З'єднання закрито", "info");
+                // ★ Не показуємо "З'єднання закрито" якщо є помилка авторизації
+                if (!hasAuthError) {
+                    toast("З'єднання закрито", "info");
+                }
             }
         };
     }

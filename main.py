@@ -494,11 +494,14 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             ),
             None,
         ):
-            try:
-                await websocket.close(code=1008, reason="Кабан вже зареєстрований в чаті")
-                return
-            except Exception:
-                pass
+
+            await websocket.send_json(
+                {
+                    "type": "user_already_authorized",
+                    "message": "Кабан вже зареєстрований в чаті"
+                }
+            )
+            return
 
         ws_connections[client_id] = {
             "ws": websocket,
