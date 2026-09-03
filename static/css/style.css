@@ -2,7 +2,7 @@
    «Ілюха на зв'язку!» — матовий зернистий дизайн
    Палітра: синій / фіолетовий / бордовий
    Чат розтягується відносно ширини екрану (fluid)
-   Оновлено: 3D-картинки на екрані авторизації
+   Оновлено: 3D-картинки на екрані авторизації + Typing Indicator
 ============================================================ */
 
 @property --angle {
@@ -122,6 +122,7 @@ body::after {
 .app.reveal > .app-bg-decor { animation-delay: 0s; }
 .app.reveal > .chat-header  { animation-delay: .02s; }
 .app.reveal > .messages     { animation-delay: .10s; }
+.app.reveal > .typing-indicator { animation-delay: .14s; }
 .app.reveal > .composer     { animation-delay: .18s; }
 
 @keyframes rise {
@@ -414,6 +415,83 @@ body::after {
 #sendButton:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ============================================================
+   ІНДИКАТОР ДРУКУ (Typing Indicator)
+============================================================ */
+.typing-indicator {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px clamp(14px, 4vw, 40px);
+    background: rgba(13, 10, 24, .62);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    font-size: .82rem;
+    color: var(--ink-mute);
+    animation: typing-fade-in .35s cubic-bezier(.2, .7, .2, 1);
+    min-height: 38px;
+}
+
+.typing-indicator.hidden {
+    display: none !important;
+}
+
+.typing-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.typing-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--violet);
+    animation: typing-bounce 1.4s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(139, 92, 246, .4);
+}
+
+.typing-dots span:nth-child(2) {
+    animation-delay: .16s;
+}
+
+.typing-dots span:nth-child(3) {
+    animation-delay: .32s;
+}
+
+@keyframes typing-bounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: .4;
+    }
+    30% {
+        transform: translateY(-8px);
+        opacity: 1;
+    }
+}
+
+@keyframes typing-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.typing-text {
+    font-weight: 500;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================================
    Оверлей авторизації + 3D-картинки
 ============================================================ */
 .auth-overlay {
@@ -692,7 +770,38 @@ body::after {
     }
 }
 
-/* ---------- Адаптація 3D-картинок ---------- */
+/* ---------- Toast ---------- */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    z-index: 100;
+    padding: 12px 22px;
+    border-radius: 999px;
+    background: rgba(17, 13, 31, .92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+    font-size: .85rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: transform .4s cubic-bezier(.2, .7, .2, 1), opacity .4s ease;
+    white-space: nowrap;
+    max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+.toast.ok   { color: var(--ok);   border-color: rgba(110, 168, 255, .35); }
+.toast.err  { color: var(--err);  border-color: rgba(255, 125, 156, .35); }
+.toast.warn { color: var(--warn); border-color: rgba(180, 140, 255, .35); }
+
+/* ---------- Адаптація ---------- */
 @media (max-width: 1100px) {
     .auth-photo--left  { width: clamp(150px, 18vw, 240px); top: 62%; }
     .auth-photo--right { width: clamp(150px, 18vw, 240px); top: 18%; }
@@ -723,6 +832,16 @@ body::after {
     .header-right { margin-left: auto; }
     .brand-mark { width: 32px; height: 32px; }
     #sendButton { width: 46px; height: 46px; }
+
+    .typing-indicator {
+        padding: 8px 14px;
+        font-size: .76rem;
+    }
+
+    .typing-dots span {
+        width: 5px;
+        height: 5px;
+    }
 }
 
 @media (max-width: 420px) {
@@ -746,5 +865,9 @@ body::after {
     .auth-photo {
         animation: none !important;
         transform: none !important;
+    }
+    .typing-dots span {
+        animation: none !important;
+        opacity: .6;
     }
 }

@@ -1,10 +1,10 @@
 /* ============================================================
    Логіка клієнта: handshake → авторизація → (зміна пароля) → чат
-   + ПАГІНАЦІЯ ІСТОРІЇ:
-     • Подвійна підгрузка виправлена через вимкнення smooth scroll
-       під час init-завантаження (замість таймера)
-     • Інформативні повідомлення → toast
-     • Підгрузка старих повідомлень повністю непомітна
+   + TYPING INDICATOR:
+     • Відправка статусу "друкує" кожні 3 секунди
+     • Відображення хто друкує з анімацією
+     • Автоматичне приховування через 6 секунд
+     • Підтримка множинних користувачів
 ============================================================ */
 "use strict";
 
@@ -30,6 +30,12 @@
     let isLoadingMessages = false;
     let scrollTick = false;
 
+    // ★ TYPING INDICATOR
+    let typingUsers = new Map(); // login -> timeout ID
+    let lastTypingSent = 0;
+    const TYPING_THROTTLE = 3000; // 3 секунди між відправками
+    const TYPING_DISPLAY_TIMEOUT = 6000; // 6 секунд показу (трохи більше ніж 5 на сервері)
+
     // Елементи
     const app = $("app");
     const messagesEl = $("messages");
@@ -52,6 +58,8 @@
     const confirmPasswordInput = $("confirmPasswordInput");
     const changePasswordButton = $("changePasswordButton");
     const toastEl = $("toast");
+    const typingIndicator = $("typingIndicator");
+    const typingText = $("typingText");
 
     // ============================================================
     // UI-хелпери
@@ -195,6 +203,82 @@
         confirmPasswordInput.value = "";
         messageText.value = "";
     }
+
+    // ============================================================
+    // ★ TYPING INDICATOR
+    // ============================================================
+
+    function updateTypingIndicator() {
+        // Фільтруємо тільки інших користувачів (не себе)
+        const users = Array.from(typingUsers.keys()).filter(login => login !== myLogin);
+
+        if (users.length === 0) {
+            typingIndicator.classList.add("hidden");
+            return;
+        }
+
+        typingIndicator.classList.remove("hidden");
+
+        if (users.length === 1) {
+            typingText.textContent = `${users[0]} друкує...`;
+        } else if (users.length === 2) {
+            typingText.textContent = `${users[0]} і ${users[1]} друкують...`;
+        } else {
+            typingText.textContent = `${users[0]} і ще ${users.length - 1} друкують...`;
+        }
+    }
+
+    function addUserTyping(login) {
+        if (login === myLogin) return; // Ігноруємо себе
+
+        // Якщо користувач вже в списку, очищуємо старий таймаут
+        if (typingUsers.has(login)) {
+            clearTimeout(typingUsers.get(login));
+        }
+
+        // Встановлюємо новий таймаут на автоматичне видалення
+        const timeout = setTimeout(() => {
+            typingUsers.delete(login);
+            updateTypingIndicator();
+        }, TYPING_DISPLAY_TIMEOUT);
+
+        typingUsers.set(login, timeout);
+        updateTypingIndicator();
+    }
+
+    function removeUserTyping(login) {
+        if (typingUsers.has(login)) {
+            clearTimeout(typingUsers.get(login));
+            typingUsers.delete(login);
+            updateTypingIndicator();
+        }
+    }
+
+    function clearAllTyping() {
+        typingUsers.forEach(timeout => clearTimeout(timeout));
+        typingUsers.clear();
+        updateTypingIndicator();
+    }
+
+    function sendTypingIndicator() {
+        if (!isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const text = messageText.value.trim();
+        if (!text) return; // Не відправляти якщо поле порожнє
+
+        const now = Date.now();
+        if (now - lastTypingSent < TYPING_THROTTLE) return; // Throttle
+
+        try {
+            ws.send(JSON.stringify({type: "user_is_typing"}));
+            lastTypingSent = now;
+        } catch (err) {
+            console.error("Помилка відправки typing:", err);
+        }
+    }
+
+    // Слухач введення тексту
+    messageText.addEventListener("input", sendTypingIndicator);
 
     // ============================================================
     // ПАГІНАЦІЯ ІСТОРІЇ
@@ -418,6 +502,10 @@
             ws.send(JSON.stringify({type: "encrypted_message", data: encryptedData}));
             addMessage(text, "out");
             messageText.value = "";
+
+            // ★ Скидаємо throttle при відправці повідомлення
+            lastTypingSent = 0;
+
             messageText.focus();
         } catch (err) {
             console.error(err);
@@ -458,6 +546,10 @@
 
         hasMoreMessages = false;
         isLoadingMessages = false;
+
+        // ★ Очищаємо всі typing статуси при перепідключенні
+        clearAllTyping();
+        lastTypingSent = 0;
 
         setComposerEnabled(false);
         setLoading(loginButton, false);
@@ -521,7 +613,6 @@
                         break;
                     }
 
-                    // ★ НОВИЙ: сервер шле JSON замість close(1008)
                     case "user_already_authorized": {
                         pendingAuth = false;
                         pendingChange = false;
@@ -532,7 +623,6 @@
                         setStatus("Вже в мережі", "error");
                         toast(msg.message || "Кабан вже зареєстрований в чаті", "err");
 
-                        // Закриваємо з'єднання з клієнта
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.close(4000, "user_already_authorized");
                         }
@@ -630,6 +720,11 @@
                             const plaintext = await IlyuhaCrypto.decryptText(aesKey, msg.data, clientId);
                             const owner = typeof msg.owner === "string" ? msg.owner : null;
                             addMessage(plaintext, "in", owner);
+
+                            // ★ Якщо прийшло повідомлення від користувача, прибираємо його зі списку тих, хто друкує
+                            if (owner) {
+                                removeUserTyping(owner);
+                            }
                         } catch (_) {
                             toast("Не вдалося розшифрувати повідомлення", "err");
                         }
@@ -647,8 +742,35 @@
                                 : msg.event === "disconnected" ? "err"
                                     : "info";
                             addSystem(plaintext, kind);
+
+                            // ★ Якщо користувач відключився, прибираємо його зі списку тих, хто друкує
+                            if (msg.event === "disconnected" && msg.client_id) {
+                                // Знаходимо login за client_id (якщо можливо) або очищаємо всіх
+                                // Для простоти очищаємо всіх при відключенні
+                                clearAllTyping();
+                            }
                         } catch (_) {
                             toast("Не вдалося розшифрувати системне повідомлення", "err");
+                        }
+                        break;
+                    }
+
+                    // ★ TYPING INDICATOR - отримання статусу
+                    case "user_is_typing": {
+                        if (!isAuthenticated) return;
+                        const login = msg.data; // Сервер відправляє login як нешифрований текст
+                        if (typeof login === "string" && login.trim()) {
+                            addUserTyping(login);
+                        }
+                        break;
+                    }
+
+                    // ★ TYPING INDICATOR - приховування статусу
+                    case "user_is_not_typing": {
+                        if (!isAuthenticated) return;
+                        const login = msg.data;
+                        if (typeof login === "string" && login.trim()) {
+                            removeUserTyping(login);
                         }
                         break;
                     }
@@ -676,7 +798,6 @@
         ws.onclose = (event) => {
             if (event.target !== ws) return;
 
-            // ★ Зберігаємо поточну помилку авторизації ДО очищення
             const currentAuthError = authError.textContent;
             const hasAuthError = authError.classList.contains("visible");
 
@@ -689,6 +810,10 @@
             hasMoreMessages = false;
             isLoadingMessages = false;
 
+            // ★ Очищаємо всі typing статуси при відключенні
+            clearAllTyping();
+            lastTypingSent = 0;
+
             setComposerEnabled(false);
             setLoading(loginButton, false);
             setLoading(changePasswordButton, false);
@@ -700,10 +825,8 @@
 
             lockApp();
             showOverlay();
-            // showLoginForm() викликає hideAuthError() — тому зберігаємо помилку заздалегідь
             showLoginForm();
 
-            // ★ Відновлюємо помилку авторизації, якщо вона була показана до закриття
             if (hasAuthError && currentAuthError) {
                 showAuthError(currentAuthError);
             }
@@ -712,13 +835,11 @@
                 showAuthError("Сесію відхилено сервером (код 1008). Спробуйте інший логін або зверніться до адміна.");
                 toast("З'єднання закрито сервером (1008)", "err");
             } else if (!event.wasClean) {
-                // ★ Не перезаписуємо помилку якщо вона вже показана
                 if (!hasAuthError) {
                     showAuthError("З'єднання втрачено. Натисніть «Перепідключити».");
                 }
                 toast("З'єднання втрачено", "err");
             } else {
-                // ★ Не показуємо "З'єднання закрито" якщо є помилка авторизації
                 if (!hasAuthError) {
                     toast("З'єднання закрито", "info");
                 }

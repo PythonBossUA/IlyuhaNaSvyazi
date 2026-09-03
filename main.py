@@ -179,15 +179,19 @@ async def broadcast_encrypted(
     event: str = None,
     source_client_id: str = None,
     owner: str = None,
+    secure_message: bool = True
 ):
     coroutines = []
     for client_id, connection in list(ws_connections.items()):
         if client_id == exclude_client_id:
             continue
 
-        encrypted = encrypt_text(connection["aes_key"], message, client_id)
-
-        payload = {"type": message_type, "data": base64.b64encode(encrypted).decode()}
+        payload = {
+            "type": message_type,
+            "data": base64.b64encode(
+                encrypt_text(connection["aes_key"], message, client_id)
+            ).decode() if secure_message else message
+        }
 
         if owner:
             payload["owner"] = owner
@@ -288,6 +292,22 @@ async def get_last_encrypted_messages(
 
 
 # ============================================================
+# Cancel user typing
+# ============================================================
+async def cancel_typing(login: str, client_id: int, timeout: int = 5):
+    try:
+        if timeout > 0:
+            await asyncio.sleep(timeout)
+        await broadcast_encrypted(
+            message=login,
+            message_type="user_is_not_typing",
+            exclude_client_id=client_id,
+        )
+    except asyncio.CancelledError:
+        pass
+
+
+# ============================================================
 # Routes
 # ============================================================
 
@@ -309,6 +329,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
     await websocket.accept()
 
     client_public_json__task = None
+    user_not_typing__task = None
     registered = False
 
     try:
@@ -494,7 +515,6 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             ),
             None,
         ):
-
             await websocket.send_json(
                 {
                     "type": "user_already_authorized",
@@ -558,6 +578,11 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                         text=encrypt_text_for_database(message), user_id=ws_user.id
                     )
                 )
+
+                if user_not_typing__task is not None and not user_not_typing__task.done():
+                    user_not_typing__task.cancel()
+                await cancel_typing(ws_user.login, client_id, timeout=0)
+
                 await database.commit()
 
                 await broadcast_encrypted(
@@ -599,6 +624,19 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                         "reason": "last messages not found",
                     }
                 )
+            elif data.get("type") == "user_is_typing":
+                await broadcast_encrypted(
+                    message=ws_user.login,
+                    message_type="user_is_typing",
+                    exclude_client_id=client_id,
+                    secure_message=False
+                )
+
+                if user_not_typing__task is not None and not user_not_typing__task.done():
+                    user_not_typing__task.cancel()
+
+                user_not_typing__task = asyncio.create_task(cancel_typing(ws_user.login, client_id))
+
             else:
                 raise ValueError("Invalid message type")
 
@@ -615,13 +653,16 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
         if client_public_json__task is not None and not client_public_json__task.done():
             client_public_json__task.cancel()
 
+        if user_not_typing__task is not None and not user_not_typing__task.done():
+            user_not_typing__task.cancel()
+
         if registered and ws_connections.get(client_id):
             if ws_connections[client_id]["ws"] is websocket:
                 ws_connections.pop(client_id, None)
 
                 try:
                     await broadcast_encrypted(
-                        message=f"Кабан {ws_user.login if locals().get("ws_user") else client_id} с'їбався",
+                        message=f"Кабан {ws_user.login if locals().get('ws_user') else client_id} с'їбався",
                         message_type="system_message",
                         exclude_client_id=client_id,
                         event="disconnected",
