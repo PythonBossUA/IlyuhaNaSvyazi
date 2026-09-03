@@ -1,15 +1,12 @@
 /* ============================================================
-   Логіка клієнта: handshake → авторизація → (зміна пароля) → чат
-   + TYPING INDICATOR:
-     • Відправка статусу "друкує" кожні 3 секунди
-     • Відображення хто друкує з анімацією
-     • Автоматичне приховування через 6 секунд
-     • Підтримка множинних користувачів
+   Оптимізований клієнт: Binary WebSocket protocol + orjson сумісність
 ============================================================ */
 "use strict";
 
 (() => {
     const $ = (id) => document.getElementById(id);
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
 
     const clientId = document.body.dataset.clientId;
     const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/${clientId}`;
@@ -30,11 +27,11 @@
     let isLoadingMessages = false;
     let scrollTick = false;
 
-    // ★ TYPING INDICATOR
-    let typingUsers = new Map(); // login -> timeout ID
+    // Typing
+    let typingUsers = new Map();
     let lastTypingSent = 0;
-    const TYPING_THROTTLE = 3000; // 3 секунди між відправками
-    const TYPING_DISPLAY_TIMEOUT = 6000; // 6 секунд показу (трохи більше ніж 5 на сервері)
+    const TYPING_THROTTLE = 3000;
+    const TYPING_DISPLAY_TIMEOUT = 6000;
 
     // Елементи
     const app = $("app");
@@ -62,9 +59,8 @@
     const typingText = $("typingText");
 
     // ============================================================
-    // UI-хелпери
+    // UI хелпери (оптимізовані)
     // ============================================================
-
     function setStatus(text, state = "connect") {
         statusText.textContent = text;
         statusDot.className = "status-dot" + (state === "ok" ? " ok" : state === "error" ? " error" : "");
@@ -140,11 +136,9 @@
     function addSystem(text, kind = "info") {
         const wrap = document.createElement("div");
         wrap.className = `msg sys ${kind}`;
-
         const bubble = document.createElement("div");
         bubble.className = "bubble";
         bubble.textContent = text;
-
         wrap.appendChild(bubble);
         messagesEl.appendChild(wrap);
         messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -178,23 +172,10 @@
         setTimeout(() => newPasswordInput.focus(), 120);
     }
 
-    function showOverlay() {
-        authOverlay.classList.remove("is-hidden");
-    }
-
-    function hideOverlay() {
-        authOverlay.classList.add("is-hidden");
-    }
-
-    function lockApp() {
-        app.classList.add("locked");
-        app.classList.remove("reveal");
-    }
-
-    function unlockApp() {
-        app.classList.remove("locked");
-        app.classList.add("reveal");
-    }
+    function showOverlay() { authOverlay.classList.remove("is-hidden"); }
+    function hideOverlay() { authOverlay.classList.add("is-hidden"); }
+    function lockApp() { app.classList.add("locked"); app.classList.remove("reveal"); }
+    function unlockApp() { app.classList.remove("locked"); app.classList.add("reveal"); }
 
     function clearAllInputs() {
         loginInput.value = "";
@@ -205,11 +186,9 @@
     }
 
     // ============================================================
-    // ★ TYPING INDICATOR
+    // Typing indicator (оптимізований)
     // ============================================================
-
     function updateTypingIndicator() {
-        // Фільтруємо тільки інших користувачів (не себе)
         const users = Array.from(typingUsers.keys()).filter(login => login !== myLogin);
 
         if (users.length === 0) {
@@ -220,23 +199,21 @@
         typingIndicator.classList.remove("hidden");
 
         if (users.length === 1) {
-            typingText.textContent = `${users[0]} друкує...`;
+            typingText.textContent = `${users[0]} пічатає...`;
         } else if (users.length === 2) {
-            typingText.textContent = `${users[0]} і ${users[1]} друкують...`;
+            typingText.textContent = `${users[0]} і ${users[1]} пічатають...`;
         } else {
-            typingText.textContent = `${users[0]} і ще ${users.length - 1} друкують...`;
+            typingText.textContent = `${users[0]} і ше ${users.length - 1} пічатають...`;
         }
     }
 
     function addUserTyping(login) {
-        if (login === myLogin) return; // Ігноруємо себе
+        if (login === myLogin) return;
 
-        // Якщо користувач вже в списку, очищуємо старий таймаут
         if (typingUsers.has(login)) {
             clearTimeout(typingUsers.get(login));
         }
 
-        // Встановлюємо новий таймаут на автоматичне видалення
         const timeout = setTimeout(() => {
             typingUsers.delete(login);
             updateTypingIndicator();
@@ -264,26 +241,24 @@
         if (!isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) return;
 
         const text = messageText.value.trim();
-        if (!text) return; // Не відправляти якщо поле порожнє
+        if (!text) return;
 
         const now = Date.now();
-        if (now - lastTypingSent < TYPING_THROTTLE) return; // Throttle
+        if (now - lastTypingSent < TYPING_THROTTLE) return;
 
         try {
-            ws.send(JSON.stringify({type: "user_is_typing"}));
+            ws.send(enc.encode(JSON.stringify({type: "user_is_typing"})));
             lastTypingSent = now;
         } catch (err) {
             console.error("Помилка відправки typing:", err);
         }
     }
 
-    // Слухач введення тексту
     messageText.addEventListener("input", sendTypingIndicator);
 
     // ============================================================
-    // ПАГІНАЦІЯ ІСТОРІЇ
+    // Пагінація (оптимізована)
     // ============================================================
-
     function formatHistoryTime(isoString) {
         try {
             const date = new Date(isoString);
@@ -307,8 +282,7 @@
         const dir = isMine ? "out" : "in";
 
         const wrap = document.createElement("div");
-        wrap.className = `msg ${dir}`;
-        wrap.classList.add("msg-no-anim");
+        wrap.className = `msg ${dir} msg-no-anim`;
 
         if (!isMine && item.login) {
             const author = document.createElement("div");
@@ -396,7 +370,7 @@
         isLoadingMessages = true;
 
         try {
-            ws.send(JSON.stringify({type: "load_encrypted_messages"}));
+            ws.send(enc.encode(JSON.stringify({type: "load_encrypted_messages"})));
         } catch (err) {
             console.error(err);
             isLoadingMessages = false;
@@ -404,7 +378,7 @@
     }
 
     // ============================================================
-    // Scroll listener
+    // Scroll listener (passive для швидкодії)
     // ============================================================
     messagesEl.addEventListener("scroll", () => {
         if (scrollTick) return;
@@ -423,7 +397,6 @@
     // ============================================================
     // Авторизація / зміна пароля
     // ============================================================
-
     loginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         hideAuthError();
@@ -439,11 +412,11 @@
         try {
             const encryptedPassword = await IlyuhaCrypto.encryptText(aesKey, password, clientId);
 
-            ws.send(JSON.stringify({
+            ws.send(enc.encode(JSON.stringify({
                 type: "authorization",
                 login: login,
                 password: encryptedPassword,
-            }));
+            })));
 
             myLogin = login;
             pendingAuth = true;
@@ -471,10 +444,10 @@
         try {
             const encryptedPassword = await IlyuhaCrypto.encryptText(aesKey, newPassword, clientId);
 
-            ws.send(JSON.stringify({
+            ws.send(enc.encode(JSON.stringify({
                 type: "password_change",
                 new_password: encryptedPassword,
-            }));
+            })));
 
             pendingChange = true;
             setLoading(changePasswordButton, true);
@@ -499,13 +472,11 @@
         try {
             const encryptedData = await IlyuhaCrypto.encryptText(aesKey, text, clientId);
 
-            ws.send(JSON.stringify({type: "encrypted_message", data: encryptedData}));
+            ws.send(enc.encode(JSON.stringify({type: "encrypted_message", data: encryptedData})));
             addMessage(text, "out");
             messageText.value = "";
 
-            // ★ Скидаємо throttle при відправці повідомлення
             lastTypingSent = 0;
-
             messageText.focus();
         } catch (err) {
             console.error(err);
@@ -513,9 +484,7 @@
         }
     });
 
-    reconnectBtn.addEventListener("click", () => {
-        connect();
-    });
+    reconnectBtn.addEventListener("click", () => connect());
 
     window.addEventListener("beforeunload", (e) => {
         if (pendingAuth || pendingChange) {
@@ -525,17 +494,13 @@
     });
 
     // ============================================================
-    // WebSocket
+    // WebSocket (оптимізований для binary protocol)
     // ============================================================
-
     function connect() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             const old = ws;
             ws = null;
-            try {
-                old.close(1000);
-            } catch (_) { /* ignore */
-            }
+            try { old.close(1000); } catch (_) {}
         }
 
         aesKey = null;
@@ -543,11 +508,9 @@
         isAuthenticated = false;
         pendingAuth = false;
         pendingChange = false;
-
         hasMoreMessages = false;
         isLoadingMessages = false;
 
-        // ★ Очищаємо всі typing статуси при перепідключенні
         clearAllTyping();
         lastTypingSent = 0;
 
@@ -562,13 +525,14 @@
         setStatus("Підключення…", "connect");
 
         ws = new WebSocket(WS_URL);
+        ws.binaryType = "arraybuffer"; // Binary protocol
 
         ws.onopen = async () => {
             setStatus("Рукостискання…", "connect");
             try {
                 myKeyPair = await IlyuhaCrypto.generateKeyPair();
                 const jwk = await IlyuhaCrypto.exportPublicJwk(myKeyPair);
-                ws.send(JSON.stringify({type: "public_key", jwk}));
+                ws.send(enc.encode(JSON.stringify({type: "public_key", jwk})));
             } catch (err) {
                 console.error(err);
                 setStatus("Помилка генерації ключів", "error");
@@ -579,7 +543,11 @@
         ws.onmessage = async (event) => {
             let msg;
             try {
-                msg = JSON.parse(event.data);
+                // Підтримка як binary, так і text frames
+                const data = event.data instanceof ArrayBuffer
+                    ? dec.decode(new Uint8Array(event.data))
+                    : event.data;
+                msg = JSON.parse(data);
             } catch (_) {
                 toast("Некоректна відповідь сервера", "err");
                 return;
@@ -587,7 +555,6 @@
 
             try {
                 switch (msg.type) {
-
                     case "public_key": {
                         const serverPublicKey = await IlyuhaCrypto.importPublicJwk(msg.jwk);
                         aesKey = await IlyuhaCrypto.deriveAesKey(
@@ -622,7 +589,6 @@
                         showAuthError(msg.message || "Користувач вже авторизований");
                         setStatus("Вже в мережі", "error");
                         toast(msg.message || "Кабан вже зареєстрований в чаті", "err");
-
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.close(4000, "user_already_authorized");
                         }
@@ -720,11 +686,7 @@
                             const plaintext = await IlyuhaCrypto.decryptText(aesKey, msg.data, clientId);
                             const owner = typeof msg.owner === "string" ? msg.owner : null;
                             addMessage(plaintext, "in", owner);
-
-                            // ★ Якщо прийшло повідомлення від користувача, прибираємо його зі списку тих, хто друкує
-                            if (owner) {
-                                removeUserTyping(owner);
-                            }
+                            if (owner) removeUserTyping(owner);
                         } catch (_) {
                             toast("Не вдалося розшифрувати повідомлення", "err");
                         }
@@ -742,11 +704,7 @@
                                 : msg.event === "disconnected" ? "err"
                                     : "info";
                             addSystem(plaintext, kind);
-
-                            // ★ Якщо користувач відключився, прибираємо його зі списку тих, хто друкує
                             if (msg.event === "disconnected" && msg.client_id) {
-                                // Знаходимо login за client_id (якщо можливо) або очищаємо всіх
-                                // Для простоти очищаємо всіх при відключенні
                                 clearAllTyping();
                             }
                         } catch (_) {
@@ -755,17 +713,15 @@
                         break;
                     }
 
-                    // ★ TYPING INDICATOR - отримання статусу
                     case "user_is_typing": {
                         if (!isAuthenticated) return;
-                        const login = msg.data; // Сервер відправляє login як нешифрований текст
+                        const login = msg.data;
                         if (typeof login === "string" && login.trim()) {
                             addUserTyping(login);
                         }
                         break;
                     }
 
-                    // ★ TYPING INDICATOR - приховування статусу
                     case "user_is_not_typing": {
                         if (!isAuthenticated) return;
                         const login = msg.data;
@@ -806,11 +762,9 @@
             myKeyPair = null;
             pendingAuth = false;
             pendingChange = false;
-
             hasMoreMessages = false;
             isLoadingMessages = false;
 
-            // ★ Очищаємо всі typing статуси при відключенні
             clearAllTyping();
             lastTypingSent = 0;
 

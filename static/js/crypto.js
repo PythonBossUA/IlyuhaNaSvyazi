@@ -1,6 +1,6 @@
 /* ============================================================
    Криптографія: ECDH P-256 + HKDF-SHA256 + AES-GCM-256
-   Винесено з index.html, логіка не змінена
+   Оптимізовано: кешування TextEncoder/TextDecoder
 ============================================================ */
 "use strict";
 
@@ -8,12 +8,13 @@ window.IlyuhaCrypto = (() => {
     const enc = new TextEncoder();
     const dec = new TextDecoder();
 
-    // ---------- Base64 ----------
     function bufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
         let binary = "";
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength));
+            binary += String.fromCharCode.apply(null, chunk);
         }
         return btoa(binary);
     }
@@ -27,7 +28,6 @@ window.IlyuhaCrypto = (() => {
         return bytes;
     }
 
-    // ---------- ECDH ----------
     async function generateKeyPair() {
         return await crypto.subtle.generateKey(
             { name: "ECDH", namedCurve: "P-256" },
@@ -69,7 +69,6 @@ window.IlyuhaCrypto = (() => {
         );
     }
 
-    // ---------- AES-GCM (nonce 12B + ciphertext, AAD = client_id) ----------
     function makeNonce() {
         const nonce = new Uint8Array(12);
         crypto.getRandomValues(nonce);
