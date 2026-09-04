@@ -1,5 +1,6 @@
 /* ============================================================
-   Оптимізований клієнт: Binary WebSocket protocol + orjson сумісність
+   Оптимізований клієнт: Binary WebSocket protocol
+   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ
 ============================================================ */
 "use strict";
 
@@ -33,6 +34,9 @@
     const TYPING_THROTTLE = 3000;
     const TYPING_DISPLAY_TIMEOUT = 6000;
 
+    // Редагування повідомлень
+    let messagesMap = new Map();
+
     // Елементи
     const app = $("app");
     const messagesEl = $("messages");
@@ -59,8 +63,9 @@
     const typingText = $("typingText");
 
     // ============================================================
-    // UI хелпери (оптимізовані)
+    // UI-хелпери
     // ============================================================
+
     function setStatus(text, state = "connect") {
         statusText.textContent = text;
         statusDot.className = "status-dot" + (state === "ok" ? " ok" : state === "error" ? " error" : "");
@@ -91,7 +96,7 @@
     }
 
     function getTimeString() {
-        return new Date().toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"});
+        return new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
     }
 
     function authorColorClass(name) {
@@ -102,9 +107,31 @@
         return "author-c" + (h % 5);
     }
 
-    function addMessage(text, dir, owner = null) {
+    function formatHistoryTime(isoString) {
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return "";
+            const today = new Date();
+            if (date.toDateString() === today.toDateString()) {
+                return date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+            }
+            return date.toLocaleString("uk-UA", {
+                day: "2-digit", month: "2-digit",
+                hour: "2-digit", minute: "2-digit"
+            });
+        } catch {
+            return "";
+        }
+    }
+
+    // ============================================================
+    // Повідомлення
+    // ============================================================
+
+    function addMessage(text, dir, owner = null, messageId = null) {
         const wrap = document.createElement("div");
         wrap.className = `msg ${dir}`;
+        if (messageId) wrap.dataset.messageId = messageId;
 
         let who = null;
         if (dir === "out") {
@@ -128,9 +155,19 @@
         time.className = "msg-time";
         time.textContent = getTimeString();
 
+        // Кнопка редагування для власних повідомлень
+        if (dir === "out" && messageId) {
+            const actions = createMessageActions(wrap, messageId, text);
+            wrap.appendChild(actions);
+        }
+
         wrap.append(bubble, time);
         messagesEl.appendChild(wrap);
         messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        if (messageId) {
+            messagesMap.set(messageId, wrap);
+        }
     }
 
     function addSystem(text, kind = "info") {
@@ -144,50 +181,150 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    function setComposerEnabled(enabled) {
-        messageText.disabled = !enabled;
-        sendButton.disabled = !enabled;
-    }
+    function createMessageActions(wrap, messageId, currentText) {
+        const actions = document.createElement("div");
+        actions.className = "msg-actions";
 
-    function syncLoginButton() {
-        loginButton.disabled = !aesKey || pendingAuth;
-    }
+        const editBtn = document.createElement("button");
+        editBtn.className = "msg-action-btn";
+        editBtn.textContent = "✏️";
+        editBtn.title = "Редагувати";
+        editBtn.type = "button";
+        editBtn.addEventListener("click", () => startEditMessage(wrap, messageId, currentText));
 
-    function showLoginForm() {
-        loginForm.classList.remove("hidden");
-        passwordChangeForm.classList.add("hidden");
-        authTitle.textContent = "Врата в чат";
-        authSub.textContent = "Ілюха шифрується алгоритмами ECDH + AES-GCM";
-        hideAuthError();
-        syncLoginButton();
-        setTimeout(() => loginInput.focus(), 120);
-    }
-
-    function showPasswordChangeForm() {
-        loginForm.classList.add("hidden");
-        passwordChangeForm.classList.remove("hidden");
-        authTitle.textContent = "Тре поміняти пароль";
-        authSub.textContent = "Бо Ілюха все бачив";
-        hideAuthError();
-        setTimeout(() => newPasswordInput.focus(), 120);
-    }
-
-    function showOverlay() { authOverlay.classList.remove("is-hidden"); }
-    function hideOverlay() { authOverlay.classList.add("is-hidden"); }
-    function lockApp() { app.classList.add("locked"); app.classList.remove("reveal"); }
-    function unlockApp() { app.classList.remove("locked"); app.classList.add("reveal"); }
-
-    function clearAllInputs() {
-        loginInput.value = "";
-        passwordInput.value = "";
-        newPasswordInput.value = "";
-        confirmPasswordInput.value = "";
-        messageText.value = "";
+        actions.appendChild(editBtn);
+        return actions;
     }
 
     // ============================================================
-    // Typing indicator (оптимізований)
+    // ★ РЕДАГУВАННЯ ПОВІДОМЛЕНЬ
     // ============================================================
+
+    function startEditMessage(wrap, messageId, currentText) {
+        if (wrap.querySelector(".msg-edit-form")) return;
+
+        const bubble = wrap.querySelector(".bubble");
+        const actions = wrap.querySelector(".msg-actions");
+
+        bubble.style.display = "none";
+        if (actions) actions.style.display = "none";
+
+        const form = document.createElement("form");
+        form.className = "msg-edit-form";
+
+        const input = document.createElement("input");
+        input.className = "msg-edit-input";
+        input.type = "text";
+        input.value = currentText;
+        input.maxLength = 10000;
+
+        const saveBtn = document.createElement("button");
+        saveBtn.className = "msg-edit-btn save";
+        saveBtn.type = "submit";
+        saveBtn.textContent = "✓";
+        saveBtn.title = "Зберегти";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "msg-edit-btn cancel";
+        cancelBtn.type = "button";
+        cancelBtn.textContent = "✕";
+        cancelBtn.title = "Скасувати";
+
+        form.append(input, saveBtn, cancelBtn);
+        wrap.insertBefore(form, bubble);
+
+        input.focus();
+        input.select();
+
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            saveEditMessage(wrap, messageId, input.value, bubble, actions);
+        });
+
+        cancelBtn.addEventListener("click", () => {
+            cancelEditMessage(wrap, bubble, actions);
+        });
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                cancelEditMessage(wrap, bubble, actions);
+            }
+        });
+    }
+
+    function cancelEditMessage(wrap, bubble, actions) {
+        const form = wrap.querySelector(".msg-edit-form");
+        if (form) form.remove();
+        bubble.style.display = "";
+        if (actions) actions.style.display = "";
+    }
+
+    async function saveEditMessage(wrap, messageId, newText, bubble, actions) {
+        try {
+            const encryptedData = await IlyuhaCrypto.encryptText(aesKey, newText, clientId);
+
+            ws.send(enc.encode(JSON.stringify({
+                type: "change_message",
+                message_id: messageId,
+                new_text: encryptedData
+            })));
+
+            // Оптимістичне оновлення
+            bubble.textContent = newText;
+
+            const form = wrap.querySelector(".msg-edit-form");
+            if (form) form.remove();
+
+            bubble.style.display = "";
+            if (actions) actions.style.display = "";
+
+            // Оновлюємо текст для майбутніх редагувань
+            const editBtn = wrap.querySelector(".msg-action-btn");
+            if (editBtn) {
+                const newActions = createMessageActions(wrap, messageId, newText);
+                actions.replaceWith(newActions);
+            }
+
+            addEditedMark(wrap);
+            toast("Повідомлення оновлено", "ok");
+        } catch (err) {
+            console.error("Помилка редагування:", err);
+            toast("Не вдалося оновити повідомлення", "err");
+        }
+    }
+
+    function addEditedMark(wrap) {
+        let editedMark = wrap.querySelector(".msg-edited");
+        if (!editedMark) {
+            editedMark = document.createElement("span");
+            editedMark.className = "msg-edited";
+            editedMark.textContent = "(редаговано)";
+            const timeEl = wrap.querySelector(".msg-time");
+            if (timeEl) timeEl.appendChild(editedMark);
+        }
+    }
+
+    function updateMessageFromServer(messageId, newText) {
+        const wrap = messagesMap.get(messageId);
+        if (!wrap) return;
+
+        const bubble = wrap.querySelector(".bubble");
+        if (bubble) bubble.textContent = newText;
+
+        // Оновлюємо текст для кнопки редагування
+        const actions = wrap.querySelector(".msg-actions");
+        if (actions) {
+            const newActions = createMessageActions(wrap, messageId, newText);
+            actions.replaceWith(newActions);
+        }
+
+        addEditedMark(wrap);
+    }
+
+    // ============================================================
+    // Typing indicator
+    // ============================================================
+
     function updateTypingIndicator() {
         const users = Array.from(typingUsers.keys()).filter(login => login !== myLogin);
 
@@ -199,11 +336,11 @@
         typingIndicator.classList.remove("hidden");
 
         if (users.length === 1) {
-            typingText.textContent = `${users[0]} пічатає...`;
+            typingText.textContent = `${users[0]} друкує...`;
         } else if (users.length === 2) {
-            typingText.textContent = `${users[0]} і ${users[1]} пічатають...`;
+            typingText.textContent = `${users[0]} і ${users[1]} друкують...`;
         } else {
-            typingText.textContent = `${users[0]} і ше ${users.length - 1} пічатають...`;
+            typingText.textContent = `${users[0]} і ще ${users.length - 1} друкують...`;
         }
     }
 
@@ -247,7 +384,7 @@
         if (now - lastTypingSent < TYPING_THROTTLE) return;
 
         try {
-            ws.send(enc.encode(JSON.stringify({type: "user_is_typing"})));
+            ws.send(enc.encode(JSON.stringify({ type: "user_is_typing" })));
             lastTypingSent = now;
         } catch (err) {
             console.error("Помилка відправки typing:", err);
@@ -257,24 +394,8 @@
     messageText.addEventListener("input", sendTypingIndicator);
 
     // ============================================================
-    // Пагінація (оптимізована)
+    // Пагінація історії
     // ============================================================
-    function formatHistoryTime(isoString) {
-        try {
-            const date = new Date(isoString);
-            if (isNaN(date.getTime())) return "";
-            const today = new Date();
-            if (date.toDateString() === today.toDateString()) {
-                return date.toLocaleTimeString("uk-UA", {hour: "2-digit", minute: "2-digit"});
-            }
-            return date.toLocaleString("uk-UA", {
-                day: "2-digit", month: "2-digit",
-                hour: "2-digit", minute: "2-digit"
-            });
-        } catch {
-            return "";
-        }
-    }
 
     async function renderHistoryMessage(item) {
         const plaintext = await IlyuhaCrypto.decryptText(aesKey, item.text, clientId);
@@ -283,6 +404,7 @@
 
         const wrap = document.createElement("div");
         wrap.className = `msg ${dir} msg-no-anim`;
+        wrap.dataset.messageId = item.id;
 
         if (!isMine && item.login) {
             const author = document.createElement("div");
@@ -299,7 +421,14 @@
         time.className = "msg-time";
         time.textContent = formatHistoryTime(item.sent_at);
 
+        // Кнопка редагування для власних повідомлень
+        if (isMine) {
+            const actions = createMessageActions(wrap, item.id, plaintext);
+            wrap.appendChild(actions);
+        }
+
         wrap.append(bubble, time);
+        messagesMap.set(item.id, wrap);
         return wrap;
     }
 
@@ -370,7 +499,7 @@
         isLoadingMessages = true;
 
         try {
-            ws.send(enc.encode(JSON.stringify({type: "load_encrypted_messages"})));
+            ws.send(enc.encode(JSON.stringify({ type: "load_encrypted_messages" })));
         } catch (err) {
             console.error(err);
             isLoadingMessages = false;
@@ -378,7 +507,7 @@
     }
 
     // ============================================================
-    // Scroll listener (passive для швидкодії)
+    // Scroll listener
     // ============================================================
     messagesEl.addEventListener("scroll", () => {
         if (scrollTick) return;
@@ -392,11 +521,61 @@
                 requestOlderMessages();
             }
         });
-    }, {passive: true});
+    }, { passive: true });
 
     // ============================================================
-    // Авторизація / зміна пароля
+    // UI state
     // ============================================================
+
+    function setComposerEnabled(enabled) {
+        messageText.disabled = !enabled;
+        sendButton.disabled = !enabled;
+    }
+
+    function syncLoginButton() {
+        loginButton.disabled = !aesKey || pendingAuth;
+    }
+
+    function showLoginForm() {
+        loginForm.classList.remove("hidden");
+        passwordChangeForm.classList.add("hidden");
+        authTitle.textContent = "Врата в чат";
+        authSub.textContent = "Ілюха шифрується алгоритмами ECDH + AES-GCM";
+        hideAuthError();
+        syncLoginButton();
+        setTimeout(() => loginInput.focus(), 120);
+    }
+
+    function showPasswordChangeForm() {
+        loginForm.classList.add("hidden");
+        passwordChangeForm.classList.remove("hidden");
+        authTitle.textContent = "Тре поміняти пароль";
+        authSub.textContent = "Бо Ілюха все бачив";
+        hideAuthError();
+        setTimeout(() => newPasswordInput.focus(), 120);
+    }
+
+    function showOverlay() { authOverlay.classList.remove("is-hidden"); }
+    function hideOverlay() { authOverlay.classList.add("is-hidden"); }
+    function lockApp() { app.classList.add("locked"); app.classList.remove("reveal"); }
+    function unlockApp() { app.classList.remove("locked"); app.classList.add("reveal"); }
+
+    function clearAllInputs() {
+        loginInput.value = "";
+        passwordInput.value = "";
+        newPasswordInput.value = "";
+        confirmPasswordInput.value = "";
+        messageText.value = "";
+    }
+
+    function clearMessagesMap() {
+        messagesMap.clear();
+    }
+
+    // ============================================================
+    // Форми
+    // ============================================================
+
     loginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         hideAuthError();
@@ -472,7 +651,7 @@
         try {
             const encryptedData = await IlyuhaCrypto.encryptText(aesKey, text, clientId);
 
-            ws.send(enc.encode(JSON.stringify({type: "encrypted_message", data: encryptedData})));
+            ws.send(enc.encode(JSON.stringify({ type: "encrypted_message", data: encryptedData })));
             addMessage(text, "out");
             messageText.value = "";
 
@@ -494,8 +673,9 @@
     });
 
     // ============================================================
-    // WebSocket (оптимізований для binary protocol)
+    // WebSocket
     // ============================================================
+
     function connect() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             const old = ws;
@@ -513,6 +693,7 @@
 
         clearAllTyping();
         lastTypingSent = 0;
+        clearMessagesMap();
 
         setComposerEnabled(false);
         setLoading(loginButton, false);
@@ -525,14 +706,14 @@
         setStatus("Підключення…", "connect");
 
         ws = new WebSocket(WS_URL);
-        ws.binaryType = "arraybuffer"; // Binary protocol
+        ws.binaryType = "arraybuffer";
 
         ws.onopen = async () => {
             setStatus("Рукостискання…", "connect");
             try {
                 myKeyPair = await IlyuhaCrypto.generateKeyPair();
                 const jwk = await IlyuhaCrypto.exportPublicJwk(myKeyPair);
-                ws.send(enc.encode(JSON.stringify({type: "public_key", jwk})));
+                ws.send(enc.encode(JSON.stringify({ type: "public_key", jwk })));
             } catch (err) {
                 console.error(err);
                 setStatus("Помилка генерації ключів", "error");
@@ -543,7 +724,6 @@
         ws.onmessage = async (event) => {
             let msg;
             try {
-                // Підтримка як binary, так і text frames
                 const data = event.data instanceof ArrayBuffer
                     ? dec.decode(new Uint8Array(event.data))
                     : event.data;
@@ -555,6 +735,7 @@
 
             try {
                 switch (msg.type) {
+
                     case "public_key": {
                         const serverPublicKey = await IlyuhaCrypto.importPublicJwk(msg.jwk);
                         aesKey = await IlyuhaCrypto.deriveAesKey(
@@ -674,10 +855,7 @@
                     }
 
                     case "encrypted_message": {
-                        if (!isAuthenticated) {
-                            console.warn("encrypted_message до авторизації — проігноровано");
-                            return;
-                        }
+                        if (!isAuthenticated) return;
                         if (typeof msg.data !== "string") {
                             toast("Пошкоджене повідомлення", "err");
                             return;
@@ -685,7 +863,8 @@
                         try {
                             const plaintext = await IlyuhaCrypto.decryptText(aesKey, msg.data, clientId);
                             const owner = typeof msg.owner === "string" ? msg.owner : null;
-                            addMessage(plaintext, "in", owner);
+                            const messageId = msg.message_id || null;
+                            addMessage(plaintext, "in", owner, messageId);
                             if (owner) removeUserTyping(owner);
                         } catch (_) {
                             toast("Не вдалося розшифрувати повідомлення", "err");
@@ -694,21 +873,32 @@
                     }
 
                     case "system_message": {
-                        if (!isAuthenticated) {
-                            console.warn("system_message до авторизації — проігноровано");
-                            return;
-                        }
+                        if (!isAuthenticated) return;
                         try {
                             const plaintext = await IlyuhaCrypto.decryptText(aesKey, msg.data, clientId);
                             const kind = msg.event === "connected" ? "ok"
-                                : msg.event === "disconnected" ? "err"
-                                    : "info";
+                                : msg.event === "disconnected" ? "err" : "info";
                             addSystem(plaintext, kind);
                             if (msg.event === "disconnected" && msg.client_id) {
                                 clearAllTyping();
                             }
                         } catch (_) {
                             toast("Не вдалося розшифрувати системне повідомлення", "err");
+                        }
+                        break;
+                    }
+
+                    case "change_message": {
+                        if (!isAuthenticated) return;
+                        const messageId = msg.message_id;
+                        const newText = msg.data;
+                        if (!messageId || typeof newText !== "string") return;
+
+                        try {
+                            const plaintext = await IlyuhaCrypto.decryptText(aesKey, newText, clientId);
+                            updateMessageFromServer(messageId, plaintext);
+                        } catch (_) {
+                            toast("Не вдалося розшифрувати оновлення", "err");
                         }
                         break;
                     }
@@ -767,6 +957,7 @@
 
             clearAllTyping();
             lastTypingSent = 0;
+            clearMessagesMap();
 
             setComposerEnabled(false);
             setLoading(loginButton, false);

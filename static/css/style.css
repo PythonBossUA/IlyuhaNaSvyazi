@@ -1,8 +1,6 @@
 /* ============================================================
    «Ілюха на зв'язку!» — матовий зернистий дизайн
-   Палітра: синій / фіолетовий / бордовий
-   Чат розтягується відносно ширини екрану (fluid)
-   Оновлено: 3D-картинки на екрані авторизації + Typing Indicator
+   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ
 ============================================================ */
 
 @property --angle {
@@ -131,7 +129,7 @@ body::after {
 }
 
 /* ============================================================
-   Фонова фотографія в чаті (залишилась тільки bg-photo--3)
+   Фонова фотографія
 ============================================================ */
 .app-bg-decor {
     position: absolute;
@@ -158,7 +156,6 @@ body::after {
     50%      { transform: translate3d(var(--dx, 10px), var(--dy, 8px), 0) rotate(var(--rot)); }
 }
 
-/* Фото 3 — знизу зліва, нахил вправо */
 .bg-photo--3 {
     bottom: 6%;
     left: 14%;
@@ -284,12 +281,11 @@ body::after {
 .messages::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, .28); border-radius: 4px; }
 .messages::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, .45); }
 
-.msg { display: flex; flex-direction: column; animation: msg-in .3s cubic-bezier(.2, .7, .2, 1); }
+.msg { display: flex; flex-direction: column; animation: msg-in .3s cubic-bezier(.2, .7, .2, 1); position: relative; }
 .msg.out { align-items: flex-end; }
 .msg.in  { align-items: flex-start; }
 .msg.sys { align-items: center; }
 
-/* Вимкнення анімації для повідомлень з історії */
 .msg.msg-no-anim,
 .msg.msg-no-anim .bubble,
 .msg.msg-no-anim .msg-author {
@@ -360,7 +356,122 @@ body::after {
 .msg.sys.err  .bubble { color: var(--err);  border-color: rgba(255, 125, 156, .4); }
 .msg.sys.warn .bubble { color: var(--warn); border-color: rgba(180, 140, 255, .4); }
 
-.msg-time { font-size: .68rem; color: var(--ink-mute); margin-top: 4px; padding-inline: 4px; }
+.msg-time { font-size: .68rem; color: var(--ink-mute); margin-top: 4px; padding-inline: 4px; display: flex; align-items: center; gap: 4px; }
+
+/* ============================================================
+   ★ Кнопки дій для повідомлень
+============================================================ */
+.msg-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.msg:hover .msg-actions {
+    opacity: 1;
+}
+
+.msg-action-btn {
+    padding: 3px 8px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(139, 92, 246, 0.15);
+    color: var(--ink-dim);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    line-height: 1;
+}
+
+.msg-action-btn:hover {
+    background: rgba(139, 92, 246, 0.3);
+    color: var(--ink);
+    transform: scale(1.05);
+}
+
+.msg-action-btn:active {
+    transform: scale(0.95);
+}
+
+/* ============================================================
+   ★ Форма редагування
+============================================================ */
+.msg-edit-form {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    max-width: min(74%, 680px);
+    margin-top: 4px;
+}
+
+.msg-edit-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--blue);
+    border-radius: 8px;
+    background: rgba(11, 9, 18, 0.8);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.msg-edit-input:focus {
+    box-shadow: 0 0 0 2px rgba(79, 125, 255, 0.3);
+    border-color: var(--blue-deep);
+}
+
+.msg-edit-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.2s ease;
+    line-height: 1;
+}
+
+.msg-edit-btn:hover {
+    transform: translateY(-1px);
+    opacity: 0.9;
+}
+
+.msg-edit-btn:active {
+    transform: translateY(0);
+}
+
+.msg-edit-btn.save {
+    background: var(--blue);
+    color: white;
+    box-shadow: 0 2px 8px rgba(79, 125, 255, 0.3);
+}
+
+.msg-edit-btn.save:hover {
+    background: var(--blue-deep);
+}
+
+.msg-edit-btn.cancel {
+    background: rgba(139, 92, 246, 0.2);
+    color: var(--ink-dim);
+}
+
+.msg-edit-btn.cancel:hover {
+    background: rgba(139, 92, 246, 0.35);
+    color: var(--ink);
+}
+
+/* ============================================================
+   ★ Позначка "відредаговано"
+============================================================ */
+.msg-edited {
+    font-size: 0.65rem;
+    color: var(--ink-mute);
+    font-style: italic;
+}
 
 /* ---------- Композер ---------- */
 .composer {
@@ -415,7 +526,7 @@ body::after {
 #sendButton:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ============================================================
-   ІНДИКАТОР ДРУКУ (Typing Indicator)
+   ІНДИКАТОР ДРУКУ
 ============================================================ */
 .typing-indicator {
     position: relative;
@@ -434,53 +545,29 @@ body::after {
     min-height: 38px;
 }
 
-.typing-indicator.hidden {
-    display: none !important;
-}
+.typing-indicator.hidden { display: none !important; }
 
-.typing-dots {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
+.typing-dots { display: flex; align-items: center; gap: 4px; }
 
 .typing-dots span {
-    width: 6px;
-    height: 6px;
+    width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--violet);
     animation: typing-bounce 1.4s ease-in-out infinite;
     box-shadow: 0 0 8px rgba(139, 92, 246, .4);
 }
 
-.typing-dots span:nth-child(2) {
-    animation-delay: .16s;
-}
-
-.typing-dots span:nth-child(3) {
-    animation-delay: .32s;
-}
+.typing-dots span:nth-child(2) { animation-delay: .16s; }
+.typing-dots span:nth-child(3) { animation-delay: .32s; }
 
 @keyframes typing-bounce {
-    0%, 60%, 100% {
-        transform: translateY(0);
-        opacity: .4;
-    }
-    30% {
-        transform: translateY(-8px);
-        opacity: 1;
-    }
+    0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+    30% { transform: translateY(-8px); opacity: 1; }
 }
 
 @keyframes typing-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .typing-text {
@@ -502,7 +589,6 @@ body::after {
     place-items: center;
     padding: 22px;
     overflow-y: auto;
-    /* Перспектива для 3D-ефекту картинок */
     perspective: 1200px;
     perspective-origin: 50% 50%;
     background:
@@ -515,7 +601,6 @@ body::after {
 .auth-overlay.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .auth-overlay.is-hidden .auth-card { transform: scale(.95) translateY(10px); opacity: 0; }
 
-/* Анімована конічна рамка */
 .auth-card {
     width: min(92vw, 432px);
     border-radius: 26px;
@@ -650,11 +735,8 @@ body::after {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================================================
-   3D-картинки на екрані авторизації
-   Ліва (ilyuha1) — нижче, права (ilyuha2) — вище
-   Матові рамки + плавний 3D-ефект
+   3D-картинки
 ============================================================ */
-
 .auth-photo {
     position: absolute;
     z-index: 1;
@@ -662,7 +744,6 @@ body::after {
     user-select: none;
     -webkit-user-drag: none;
 
-    /* Матова рамка */
     padding: 8px;
     border-radius: 24px;
     border: 1px solid rgba(139, 92, 246, .22);
@@ -676,13 +757,11 @@ body::after {
     backdrop-filter: blur(14px) saturate(130%);
     -webkit-backdrop-filter: blur(14px) saturate(130%);
 
-    /* Внутрішнє світло + зовнішня тінь */
     box-shadow:
         0 0 0 1px rgba(255, 255, 255, .04) inset,
         0 20px 50px -15px rgba(0, 0, 0, .55),
         0 0 40px rgba(139, 92, 246, .18);
 
-    /* Плавна поява */
     opacity: 0;
     transform: translateZ(0);
     transition: opacity .8s cubic-bezier(.2, .7, .2, 1);
@@ -701,73 +780,33 @@ body::after {
     -webkit-user-drag: none;
 }
 
-/* Коли оверлей видимий — картинки з'являються */
-.auth-overlay:not(.is-hidden) .auth-photo {
-    opacity: 1;
-}
+.auth-overlay:not(.is-hidden) .auth-photo { opacity: 1; }
+.auth-overlay.is-hidden .auth-photo { opacity: 0; pointer-events: none; }
 
-/* Коли оверлей прихований — картинки зникають */
-.auth-overlay.is-hidden .auth-photo {
-    opacity: 0;
-    pointer-events: none;
-}
-
-/* Ліва картинка (ilyuha1) — НИЖЧЕ, нахил вправо */
 .auth-photo--left {
     left: clamp(10px, 4vw, 80px);
     top: 58%;
     width: clamp(180px, 22vw, 300px);
-    transform:
-        rotateY(-12deg)
-        rotateZ(-4deg)
-        translateZ(30px);
+    transform: rotateY(-12deg) rotateZ(-4deg) translateZ(30px);
     animation: photo-float-left 9s ease-in-out infinite;
 }
 
 @keyframes photo-float-left {
-    0%, 100% {
-        transform:
-            rotateY(-12deg)
-            rotateZ(-4deg)
-            translateZ(30px)
-            translateY(0);
-    }
-    50% {
-        transform:
-            rotateY(-8deg)
-            rotateZ(-3deg)
-            translateZ(50px)
-            translateY(-14px);
-    }
+    0%, 100% { transform: rotateY(-12deg) rotateZ(-4deg) translateZ(30px) translateY(0); }
+    50%      { transform: rotateY(-8deg) rotateZ(-3deg) translateZ(50px) translateY(-14px); }
 }
 
-/* Права картинка (ilyuha2) — ВИЩЕ, нахил вліво */
 .auth-photo--right {
     right: clamp(10px, 4vw, 80px);
     top: 22%;
     width: clamp(180px, 22vw, 300px);
-    transform:
-        rotateY(12deg)
-        rotateZ(4deg)
-        translateZ(40px);
+    transform: rotateY(12deg) rotateZ(4deg) translateZ(40px);
     animation: photo-float-right 11s ease-in-out infinite;
 }
 
 @keyframes photo-float-right {
-    0%, 100% {
-        transform:
-            rotateY(12deg)
-            rotateZ(4deg)
-            translateZ(40px)
-            translateY(0);
-    }
-    50% {
-        transform:
-            rotateY(8deg)
-            rotateZ(3deg)
-            translateZ(60px)
-            translateY(16px);
-    }
+    0%, 100% { transform: rotateY(12deg) rotateZ(4deg) translateZ(40px) translateY(0); }
+    50%      { transform: rotateY(8deg) rotateZ(3deg) translateZ(60px) translateY(16px); }
 }
 
 /* ---------- Toast ---------- */
@@ -793,10 +832,7 @@ body::after {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.toast.show {
-    transform: translateX(-50%) translateY(0);
-    opacity: 1;
-}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 .toast.ok   { color: var(--ok);   border-color: rgba(110, 168, 255, .35); }
 .toast.err  { color: var(--err);  border-color: rgba(255, 125, 156, .35); }
 .toast.warn { color: var(--warn); border-color: rgba(180, 140, 255, .35); }
@@ -808,22 +844,9 @@ body::after {
 }
 
 @media (max-width: 720px) {
-    .auth-photo {
-        border-radius: 18px;
-        padding: 6px;
-    }
-    .auth-photo--left {
-        left: -20px;
-        top: 68%;
-        width: clamp(120px, 30vw, 180px);
-        transform: rotateY(-8deg) rotateZ(-3deg) translateZ(10px);
-    }
-    .auth-photo--right {
-        right: -20px;
-        top: 12%;
-        width: clamp(120px, 30vw, 180px);
-        transform: rotateY(8deg) rotateZ(3deg) translateZ(10px);
-    }
+    .auth-photo { border-radius: 18px; padding: 6px; }
+    .auth-photo--left  { left: -20px; top: 68%; width: clamp(120px, 30vw, 180px); transform: rotateY(-8deg) rotateZ(-3deg) translateZ(10px); }
+    .auth-photo--right { right: -20px; top: 12%; width: clamp(120px, 30vw, 180px); transform: rotateY(8deg) rotateZ(3deg) translateZ(10px); }
     .bg-photo--3 { width: clamp(170px, 46vw, 260px); }
 }
 
@@ -833,22 +856,17 @@ body::after {
     .brand-mark { width: 32px; height: 32px; }
     #sendButton { width: 46px; height: 46px; }
 
-    .typing-indicator {
-        padding: 8px 14px;
-        font-size: .76rem;
-    }
+    .typing-indicator { padding: 8px 14px; font-size: .76rem; }
+    .typing-dots span { width: 5px; height: 5px; }
 
-    .typing-dots span {
-        width: 5px;
-        height: 5px;
-    }
+    .msg-edit-form { flex-direction: column; gap: 8px; }
+    .msg-edit-btn { padding: 8px 16px; }
 }
 
 @media (max-width: 420px) {
     .auth-photo--left  { left: -40px; opacity: .7; }
     .auth-photo--right { right: -40px; opacity: .7; }
-    .auth-photo--left,
-    .auth-photo--right { width: clamp(110px, 34vw, 160px); }
+    .auth-photo--left, .auth-photo--right { width: clamp(110px, 34vw, 160px); }
 }
 
 @media (max-height: 700px) {
@@ -862,12 +880,6 @@ body::after {
         animation-iteration-count: 1 !important;
         transition-duration: .01ms !important;
     }
-    .auth-photo {
-        animation: none !important;
-        transform: none !important;
-    }
-    .typing-dots span {
-        animation: none !important;
-        opacity: .6;
-    }
+    .auth-photo { animation: none !important; transform: none !important; }
+    .typing-dots span { animation: none !important; opacity: .6; }
 }

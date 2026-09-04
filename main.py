@@ -2,7 +2,7 @@ import os
 import uuid
 import base64
 import asyncio
-from datetime import datetime
+
 from typing import Annotated
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status, Depends
@@ -40,8 +40,7 @@ _ph = PasswordHasher(
 )
 
 # Словник: client_id -> tuple(websocket, aes_key, login)
-# Використання tuple замість dict дає приріст ~5-10% на доступ
-ws_connections: dict = {}
+ws_connections = {}
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -183,7 +182,7 @@ async def get_last_encrypted_messages(database, client_id, key, last_sent_at=Non
     limit = 15
     stmt = (
         select(
-            Message.id, Message.text, User.login,
+            Message.id, Message.text, Message.is_changed, User.login,
             func.timezone("Europe/Kyiv", Message.sent_at).label("sent_at"),
             Message.sent_at.label("cursor_sent_at"),
         )
@@ -204,6 +203,7 @@ async def get_last_encrypted_messages(database, client_id, key, last_sent_at=Non
     items = [
         {
             "id": r.id,
+            "is_changed": r.is_changed,
             "text": base64.b64encode(
                 encrypt_text(key, decrypt_text_for_database(r.text), client_id)
             ).decode("ascii"),
@@ -368,8 +368,10 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             if msg_type == "encrypted_message":
                 message = decrypt_text(server_aes, base64.b64decode(data["data"]), client_id)
 
-                await database.execute(
-                    insert(Message).values(text=encrypt_text_for_database(message), user_id=ws_user.id)
+                message_id = await database.scalar(
+                    insert(Message)
+                    .values(text=encrypt_text_for_database(message), user_id=ws_user.id)
+                    .returning(Message.id)
                 )
 
                 if typing_task and not typing_task.done():
@@ -380,6 +382,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                 await broadcast_encrypted(
                     message=message, message_type="encrypted_message",
                     exclude_client_id=client_id, owner=ws_user.login,
+                    extra_data={"message_id": message_id},
                 )
 
             elif msg_type == "load_encrypted_messages":
@@ -412,9 +415,14 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             elif msg_type == "change_message":
                 new_text = decrypt_text(server_aes, base64.b64decode(data["new_text"]), client_id)
                 result = await database.execute(
-                    update(Message).where(
+                    update(Message)
+                    .where(
                         Message.user_id == ws_user.id, Message.id == data["message_id"],
-                    ).values(text=encrypt_text_for_database(new_text))
+                    )
+                    .values(
+                        text=encrypt_text_for_database(new_text),
+                        is_changed=True
+                    )
                 )
                 if result.rowcount == 1:
                     await broadcast_encrypted(
@@ -422,6 +430,8 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                         exclude_client_id=client_id, extra_data={"message_id": data["message_id"]},
                     )
                     await database.commit()
+                else:
+                    await database.rollback()
 
     except WebSocketDisconnect:
         pass

@@ -3,7 +3,7 @@ from sqlalchemy import (
     String,
     Integer,
     Boolean,
-    text,
+    text as func_text,
     ForeignKey,
     DateTime,
     func,
@@ -21,7 +21,7 @@ class User(Base):
     login: Mapped[str] = mapped_column(String(31), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(127), nullable=False)
     require_password_change: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true")
+        Boolean, server_default=func_text("true")
     )
 
     messages: Mapped[list["Message"]] = relationship(back_populates="user")
@@ -37,6 +37,9 @@ class Message(Base):
     )
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    is_changed: Mapped[bool] = mapped_column(
+        Boolean, server_default=func_text("false")
     )
 
     user: Mapped["User"] = relationship(back_populates="messages")
