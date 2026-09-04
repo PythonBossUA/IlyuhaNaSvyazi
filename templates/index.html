@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0812">
   <title>Ілюха на связі!</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', path='img/logo.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
 </head>
 <body data-client-id="{{ client_id }}">
@@ -24,7 +25,9 @@
 
   <header class="chat-header">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-mark" aria-hidden="true">
+        <img class="brand-logo" src="{{ url_for('static', path='img/logo.png') }}" alt="" draggable="false">
+      </span>
       <div class="brand-text">
         <h1>Ілюха на связі!</h1>
         <p>ECDH + AES-GCM · Ілюха нашифрував канал</p>

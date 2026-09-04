@@ -185,6 +185,7 @@ body::after {
 
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
+/* ★ Рамка логотипа: анімований градієнт + PNG всередині */
 .brand-mark {
     width: 38px; height: 38px;
     flex: none;
@@ -193,6 +194,9 @@ body::after {
     background: conic-gradient(from var(--angle), var(--blue), var(--violet) 35%, var(--bordeaux) 65%, var(--blue));
     animation: angle-spin 8s linear infinite;
     position: relative;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
 }
 .brand-mark::after {
     content: "";
@@ -200,6 +204,22 @@ body::after {
     inset: 3px;
     border-radius: 9px;
     background: var(--bg-1);
+    z-index: 0;
+}
+
+/* ★ Сам PNG-логотип усередині рамки */
+.brand-logo {
+    position: relative;
+    z-index: 1;
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    display: block;
+    border-radius: 6px;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .35));
+    user-select: none;
+    pointer-events: none;
+    -webkit-user-drag: none;
 }
 
 .brand-text h1 {
@@ -966,7 +986,9 @@ body::after {
 @media (max-width: 480px) {
     .chat-header { flex-wrap: wrap; row-gap: 8px; }
     .header-right { margin-left: auto; }
-    .brand-mark { width: 32px; height: 32px; }
+    .brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+    .brand-mark::after { border-radius: 7px; }
+    .brand-logo { width: 22px; height: 22px; border-radius: 5px; }
     #sendButton { width: 46px; height: 46px; }
 
     .typing-indicator { padding: 8px 14px; font-size: .76rem; }
