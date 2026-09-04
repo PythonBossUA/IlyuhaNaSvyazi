@@ -18,6 +18,16 @@ Base = declarative_base()
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+# async def get_session() -> AsyncGenerator[AsyncSession, None]:
+#     async with async_session() as session:
+#         yield session
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session() as session:
+    session = async_session()
+    try:
         yield session
+    finally:
+        try:
+            await session.close()
+        except Exception:
+            pass
