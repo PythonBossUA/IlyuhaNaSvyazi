@@ -1,6 +1,6 @@
 /* ============================================================
    «Ілюха на зв'язку!» — матовий зернистий дизайн
-   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ
+   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ (оптимізовано)
 ============================================================ */
 
 @property --angle {
@@ -359,118 +359,228 @@ body::after {
 .msg-time { font-size: .68rem; color: var(--ink-mute); margin-top: 4px; padding-inline: 4px; display: flex; align-items: center; gap: 4px; }
 
 /* ============================================================
-   ★ Кнопки дій для повідомлень
+   ★ Кнопки дій для повідомлень (знизу, елегантні)
 ============================================================ */
 .msg-actions {
     display: flex;
-    gap: 4px;
-    margin-top: 4px;
+    gap: 6px;
+    margin-top: 6px;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transform: translateY(-4px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    pointer-events: none;
 }
 
-.msg:hover .msg-actions {
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
     opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.msg.out .msg-actions {
+    justify-content: flex-end;
+}
+
+.msg.in .msg-actions {
+    justify-content: flex-start;
 }
 
 .msg-action-btn {
-    padding: 3px 8px;
-    border: none;
-    border-radius: 6px;
-    background: rgba(139, 92, 246, 0.15);
+    padding: 4px 10px;
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 8px;
+    background: rgba(17, 13, 31, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: var(--ink-dim);
-    font-size: 0.7rem;
+    font-size: 0.72rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .msg-action-btn:hover {
-    background: rgba(139, 92, 246, 0.3);
+    background: linear-gradient(135deg, rgba(79, 125, 255, 0.18), rgba(139, 92, 246, 0.18));
+    border-color: rgba(139, 92, 246, 0.5);
     color: var(--ink);
-    transform: scale(1.05);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
 }
 
 .msg-action-btn:active {
-    transform: scale(0.95);
+    transform: translateY(0) scale(0.97);
 }
 
 /* ============================================================
-   ★ Форма редагування
+   ★ Форма редагування (скляна, з плавними анімаціями)
 ============================================================ */
 .msg-edit-form {
     display: flex;
-    gap: 6px;
+    flex-direction: column;
+    gap: 8px;
     width: 100%;
-    max-width: min(74%, 680px);
-    margin-top: 4px;
+    max-width: min(82%, 680px);
+    margin-top: 6px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(79, 125, 255, 0.25);
+    background: rgba(11, 9, 18, 0.75);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+        0 8px 24px rgba(0, 0, 0, 0.3);
+
+    /* Початковий стан — прихована */
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    transition: opacity 0.22s cubic-bezier(0.2, 0.7, 0.2, 1),
+                transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation: edit-form-appear 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.msg-edit-form.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@keyframes edit-form-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .msg-edit-input {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--blue);
-    border-radius: 8px;
-    background: rgba(11, 9, 18, 0.8);
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 10px;
+    background: rgba(17, 13, 31, 0.55);
     color: var(--ink);
     font: inherit;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
     outline: none;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    transition: border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                background 0.2s ease;
+}
+
+.msg-edit-input::placeholder {
+    color: var(--ink-mute);
+}
+
+.msg-edit-input:hover {
+    border-color: rgba(139, 92, 246, 0.5);
 }
 
 .msg-edit-input:focus {
-    box-shadow: 0 0 0 2px rgba(79, 125, 255, 0.3);
-    border-color: var(--blue-deep);
+    border-color: var(--blue);
+    box-shadow:
+        0 0 0 3px rgba(79, 125, 255, 0.15),
+        0 0 16px rgba(139, 92, 246, 0.18);
+    background: rgba(23, 18, 48, 0.75);
+}
+
+.msg-edit-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
 }
 
 .msg-edit-btn {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.75rem;
+    padding: 7px 14px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 0.78rem;
     font-weight: 600;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    transition: transform 0.15s ease, opacity 0.2s ease;
+    transition: transform 0.15s ease,
+                background 0.2s ease,
+                border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                color 0.2s ease;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.msg-edit-btn .icon {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.msg-edit-btn .label {
+    letter-spacing: 0.02em;
 }
 
 .msg-edit-btn:hover {
     transform: translateY(-1px);
-    opacity: 0.9;
 }
 
 .msg-edit-btn:active {
-    transform: translateY(0);
+    transform: translateY(0) scale(0.97);
 }
 
+/* Кнопка "Зберегти" — акцентна, з градієнтом */
 .msg-edit-btn.save {
-    background: var(--blue);
-    color: white;
-    box-shadow: 0 2px 8px rgba(79, 125, 255, 0.3);
+    background: linear-gradient(135deg, var(--blue), var(--violet));
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(79, 125, 255, 0.35);
 }
 
 .msg-edit-btn.save:hover {
-    background: var(--blue-deep);
+    background: linear-gradient(135deg, var(--blue-deep), var(--violet-deep));
+    box-shadow: 0 6px 18px rgba(79, 125, 255, 0.5);
+    border-color: rgba(255, 255, 255, 0.12);
 }
 
+.msg-edit-btn.save:active {
+    box-shadow: 0 2px 6px rgba(79, 125, 255, 0.3);
+}
+
+/* Кнопка "Скасувати" — нейтральна, скляна */
 .msg-edit-btn.cancel {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(139, 92, 246, 0.12);
+    border-color: rgba(139, 92, 246, 0.25);
     color: var(--ink-dim);
 }
 
 .msg-edit-btn.cancel:hover {
-    background: rgba(139, 92, 246, 0.35);
+    background: rgba(139, 92, 246, 0.22);
+    border-color: rgba(139, 92, 246, 0.4);
     color: var(--ink);
 }
 
 /* ============================================================
-   ★ Позначка "відредаговано"
+   ★ Позначка "відредаговано" (з префіксною крапкою)
 ============================================================ */
 .msg-edited {
     font-size: 0.65rem;
     color: var(--ink-mute);
     font-style: italic;
+    margin-left: 4px;
+    opacity: 0.85;
+}
+
+.msg-edited::before {
+    content: "·";
+    margin-right: 4px;
+    color: var(--violet);
 }
 
 /* ---------- Композер ---------- */
@@ -848,6 +958,9 @@ body::after {
     .auth-photo--left  { left: -20px; top: 68%; width: clamp(120px, 30vw, 180px); transform: rotateY(-8deg) rotateZ(-3deg) translateZ(10px); }
     .auth-photo--right { right: -20px; top: 12%; width: clamp(120px, 30vw, 180px); transform: rotateY(8deg) rotateZ(3deg) translateZ(10px); }
     .bg-photo--3 { width: clamp(170px, 46vw, 260px); }
+
+    .msg-edit-form { max-width: 92%; }
+    .msg-edit-input { font-size: 0.95rem; padding: 12px; }
 }
 
 @media (max-width: 480px) {
@@ -859,8 +972,9 @@ body::after {
     .typing-indicator { padding: 8px 14px; font-size: .76rem; }
     .typing-dots span { width: 5px; height: 5px; }
 
-    .msg-edit-form { flex-direction: column; gap: 8px; }
-    .msg-edit-btn { padding: 8px 16px; }
+    .msg-edit-form { padding: 8px; }
+    .msg-edit-buttons { flex-direction: column; gap: 6px; }
+    .msg-edit-btn { width: 100%; justify-content: center; padding: 10px 16px; }
 }
 
 @media (max-width: 420px) {
@@ -882,4 +996,5 @@ body::after {
     }
     .auth-photo { animation: none !important; transform: none !important; }
     .typing-dots span { animation: none !important; opacity: .6; }
+    .msg-edit-form { animation: none !important; opacity: 1; transform: none; }
 }

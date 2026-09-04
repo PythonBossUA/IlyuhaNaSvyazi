@@ -455,7 +455,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
                     await broadcast_encrypted(
                         message=f"Кабан {ws_user.login if ws_user else client_id} с'їбався",
                         message_type="system_message", exclude_client_id=client_id,
-                        event="disconnected", source_client_id=client_id,
+                        event="disconnected", source_client_id=client_id, extra_data={"login": ws_user.login if ws_user else None}
                     )
                 except Exception:
                     pass

@@ -1,6 +1,6 @@
 /* ============================================================
    Оптимізований клієнт: Binary WebSocket protocol
-   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ
+   + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ + is_changed
 ============================================================ */
 "use strict";
 
@@ -128,6 +128,17 @@
     // Повідомлення
     // ============================================================
 
+    function addEditedMark(wrap) {
+        let editedMark = wrap.querySelector(".msg-edited");
+        if (!editedMark) {
+            editedMark = document.createElement("span");
+            editedMark.className = "msg-edited";
+            editedMark.textContent = "(редаговано)";
+            const timeEl = wrap.querySelector(".msg-time");
+            if (timeEl) timeEl.appendChild(editedMark);
+        }
+    }
+
     function addMessage(text, dir, owner = null, messageId = null) {
         const wrap = document.createElement("div");
         wrap.className = `msg ${dir}`;
@@ -155,13 +166,15 @@
         time.className = "msg-time";
         time.textContent = getTimeString();
 
-        // Кнопка редагування для власних повідомлень
+        // Спочатку додаємо основний вміст (bubble + time)
+        wrap.append(bubble, time);
+
+        // ✅ Тепер кнопки дій додаються ВНИЗ, під часом повідомлення
         if (dir === "out" && messageId) {
             const actions = createMessageActions(wrap, messageId, text);
             wrap.appendChild(actions);
         }
 
-        wrap.append(bubble, time);
         messagesEl.appendChild(wrap);
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -205,6 +218,7 @@
 
         const bubble = wrap.querySelector(".bubble");
         const actions = wrap.querySelector(".msg-actions");
+        const timeEl = wrap.querySelector(".msg-time");
 
         bubble.style.display = "none";
         if (actions) actions.style.display = "none";
@@ -217,21 +231,35 @@
         input.type = "text";
         input.value = currentText;
         input.maxLength = 10000;
+        input.autocomplete = "off";
 
         const saveBtn = document.createElement("button");
         saveBtn.className = "msg-edit-btn save";
         saveBtn.type = "submit";
-        saveBtn.textContent = "✓";
         saveBtn.title = "Зберегти";
+        saveBtn.innerHTML = '<span class="icon">✓</span><span class="label">Зберегти</span>';
 
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "msg-edit-btn cancel";
         cancelBtn.type = "button";
-        cancelBtn.textContent = "✕";
         cancelBtn.title = "Скасувати";
+        cancelBtn.innerHTML = '<span class="icon">✕</span><span class="label">Скасувати</span>';
 
-        form.append(input, saveBtn, cancelBtn);
-        wrap.insertBefore(form, bubble);
+        const buttonsWrap = document.createElement("div");
+        buttonsWrap.className = "msg-edit-buttons";
+        buttonsWrap.append(saveBtn, cancelBtn);
+
+        form.append(input, buttonsWrap);
+        // Вставляємо форму між часом і кнопками дій (або перед часом, якщо дій немає)
+        const insertBeforeEl = actions || timeEl;
+        if (insertBeforeEl && insertBeforeEl.parentNode === wrap) {
+            wrap.insertBefore(form, insertBeforeEl);
+        } else {
+            wrap.appendChild(form);
+        }
+
+        // Анімація появи через наступний кадр
+        requestAnimationFrame(() => form.classList.add("is-visible"));
 
         input.focus();
         input.select();
@@ -247,19 +275,35 @@
 
         input.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
+                e.preventDefault();
                 cancelEditMessage(wrap, bubble, actions);
+            }
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                form.requestSubmit();
             }
         });
     }
 
     function cancelEditMessage(wrap, bubble, actions) {
         const form = wrap.querySelector(".msg-edit-form");
-        if (form) form.remove();
-        bubble.style.display = "";
-        if (actions) actions.style.display = "";
+        if (!form) return;
+
+        form.classList.remove("is-visible");
+        // Плавне приховування форми перед видаленням
+        setTimeout(() => {
+            if (form.parentNode) form.remove();
+            bubble.style.display = "";
+            if (actions) actions.style.display = "";
+        }, 180);
     }
 
     async function saveEditMessage(wrap, messageId, newText, bubble, actions) {
+        if (!newText.trim()) {
+            toast("Повідомлення не може бути порожнім", "err");
+            return;
+        }
+
         try {
             const encryptedData = await IlyuhaCrypto.encryptText(aesKey, newText, clientId);
 
@@ -273,14 +317,16 @@
             bubble.textContent = newText;
 
             const form = wrap.querySelector(".msg-edit-form");
-            if (form) form.remove();
+            if (form) {
+                form.classList.remove("is-visible");
+                setTimeout(() => { if (form.parentNode) form.remove(); }, 180);
+            }
 
             bubble.style.display = "";
             if (actions) actions.style.display = "";
 
             // Оновлюємо текст для майбутніх редагувань
-            const editBtn = wrap.querySelector(".msg-action-btn");
-            if (editBtn) {
+            if (actions) {
                 const newActions = createMessageActions(wrap, messageId, newText);
                 actions.replaceWith(newActions);
             }
@@ -290,17 +336,6 @@
         } catch (err) {
             console.error("Помилка редагування:", err);
             toast("Не вдалося оновити повідомлення", "err");
-        }
-    }
-
-    function addEditedMark(wrap) {
-        let editedMark = wrap.querySelector(".msg-edited");
-        if (!editedMark) {
-            editedMark = document.createElement("span");
-            editedMark.className = "msg-edited";
-            editedMark.textContent = "(редаговано)";
-            const timeEl = wrap.querySelector(".msg-time");
-            if (timeEl) timeEl.appendChild(editedMark);
         }
     }
 
@@ -421,13 +456,23 @@
         time.className = "msg-time";
         time.textContent = formatHistoryTime(item.sent_at);
 
-        // Кнопка редагування для власних повідомлень
+        // ★ Додаємо позначку "(редаговано)" якщо is_changed === true
+        if (item.is_changed) {
+            const editedMark = document.createElement("span");
+            editedMark.className = "msg-edited";
+            editedMark.textContent = "(редаговано)";
+            time.appendChild(editedMark);
+        }
+
+        // Спочатку основний вміст
+        wrap.append(bubble, time);
+
+        // ✅ Потім — кнопки дій (знизу)
         if (isMine) {
             const actions = createMessageActions(wrap, item.id, plaintext);
             wrap.appendChild(actions);
         }
 
-        wrap.append(bubble, time);
         messagesMap.set(item.id, wrap);
         return wrap;
     }
@@ -879,8 +924,11 @@
                             const kind = msg.event === "connected" ? "ok"
                                 : msg.event === "disconnected" ? "err" : "info";
                             addSystem(plaintext, kind);
-                            if (msg.event === "disconnected" && msg.client_id) {
-                                clearAllTyping();
+
+                            // ✅ ВИПРАВЛЕНО: видаляємо індикатор "друкує" ЛИШЕ для того користувача, який вийшов
+                            // Сервер надсилає login у полі msg.login (через extra_data={"login": ...})
+                            if (msg.event === "disconnected" && typeof msg.login === "string" && msg.login) {
+                                removeUserTyping(msg.login);
                             }
                         } catch (_) {
                             toast("Не вдалося розшифрувати системне повідомлення", "err");
