@@ -133,7 +133,7 @@
         if (!editedMark) {
             editedMark = document.createElement("span");
             editedMark.className = "msg-edited";
-            editedMark.textContent = "(редаговано)";
+            editedMark.textContent = "(мінєв)";
             const timeEl = wrap.querySelector(".msg-time");
             if (timeEl) timeEl.appendChild(editedMark);
         }
@@ -201,7 +201,7 @@
         const editBtn = document.createElement("button");
         editBtn.className = "msg-action-btn";
         editBtn.textContent = "✏️";
-        editBtn.title = "Редагувати";
+        editBtn.title = "Мінєти";
         editBtn.type = "button";
         editBtn.addEventListener("click", () => startEditMessage(wrap, messageId, currentText));
 
@@ -236,14 +236,14 @@
         const saveBtn = document.createElement("button");
         saveBtn.className = "msg-edit-btn save";
         saveBtn.type = "submit";
-        saveBtn.title = "Зберегти";
-        saveBtn.innerHTML = '<span class="icon">✓</span><span class="label">Зберегти</span>';
+        saveBtn.title = "Мінєти";
+        saveBtn.innerHTML = '<span class="icon">✓</span><span class="label">Мінєти</span>';
 
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "msg-edit-btn cancel";
         cancelBtn.type = "button";
-        cancelBtn.title = "Скасувати";
-        cancelBtn.innerHTML = '<span class="icon">✕</span><span class="label">Скасувати</span>';
+        cancelBtn.title = "Не мінєти";
+        cancelBtn.innerHTML = '<span class="icon">✕</span><span class="label">Не мінєти</span>';
 
         const buttonsWrap = document.createElement("div");
         buttonsWrap.className = "msg-edit-buttons";
@@ -332,7 +332,7 @@
             }
 
             addEditedMark(wrap);
-            toast("Повідомлення оновлено", "ok");
+            toast("Повідомлення помінєв", "ok");
         } catch (err) {
             console.error("Помилка редагування:", err);
             toast("Не вдалося оновити повідомлення", "err");
@@ -371,11 +371,11 @@
         typingIndicator.classList.remove("hidden");
 
         if (users.length === 1) {
-            typingText.textContent = `${users[0]} друкує...`;
+            typingText.textContent = `${users[0]} пічатає...`;
         } else if (users.length === 2) {
-            typingText.textContent = `${users[0]} і ${users[1]} друкують...`;
+            typingText.textContent = `${users[0]} і ${users[1]} пічатають...`;
         } else {
-            typingText.textContent = `${users[0]} і ще ${users.length - 1} друкують...`;
+            typingText.textContent = `${users[0]} і ще ${users.length - 1} пічатають...`;
         }
     }
 
@@ -460,7 +460,7 @@
         if (item.is_changed) {
             const editedMark = document.createElement("span");
             editedMark.className = "msg-edited";
-            editedMark.textContent = "(редаговано)";
+            editedMark.textContent = "(мінєв)";
             time.appendChild(editedMark);
         }
 
@@ -630,7 +630,7 @@
 
         if (!login) return showAuthError("Введіть логін");
         if (!password) return showAuthError("Введіть пароль");
-        if (!aesKey) return showAuthError("Захищений канал ще не встановлено — зачекайте");
+        if (!aesKey) return showAuthError("Захищений канал ще не встановлено — пуждай");
         if (pendingAuth) return;
 
         try {
