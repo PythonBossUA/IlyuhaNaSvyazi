@@ -112,7 +112,7 @@ def derive_aes_key(my_private_key, peer_public_key, salt):
 # ============================================================
 def encrypt_text(key, text, client_id):
     nonce = os.urandom(12)
-    return nonce + AESGCM(key).encrypt(
+    return nonce + key.encrypt(
         nonce, text.encode("utf-8"), f"client_id={client_id}|v=1".encode("ascii")
     )
 
@@ -121,7 +121,7 @@ def encrypt_text_for_database(text):
     return nonce + _DB_AES.encrypt(nonce, text.encode("utf-8"), None)
 
 def decrypt_text(key, packet, client_id):
-    return AESGCM(key).decrypt(
+    return key.decrypt(
         packet[:12], packet[12:], f"client_id={client_id}|v=1".encode("ascii")
     ).decode("utf-8")
 
@@ -132,34 +132,29 @@ def decrypt_text_for_database(packet):
 # ============================================================
 # Broadcast
 # ============================================================
-# TODO переробити в list comprehension
 async def broadcast_encrypted(
-    message, message_type="encrypted_message", exclude_client_id=None,
-    event=None, source_client_id=None, owner=None, extra_data=None,
+    message,
+    message_type,
+    exclude_client_id=None,
+    extra_data=None,
     secure_message=True,
 ):
-    coros = []
-    for cid, conn in ws_connections.items():
-        if cid == exclude_client_id:
-            continue
-
-        payload = {
-            "type": message_type,
-            "data": base64.b64encode(
-                encrypt_text(conn[1], message, cid)
-            ).decode("ascii") if secure_message else message,
-        }
-        if owner:
-            payload["owner"] = owner
-        if extra_data:
-            payload.update(extra_data)
-        if message_type == "system_message":
-            if event is not None:
-                payload["event"] = event
-            if source_client_id is not None:
-                payload["client_id"] = source_client_id
-
-        coros.append(conn[0].send_bytes(orjson.dumps(payload)))
+    extra_data = extra_data or {}
+    coros = [
+        conn[0].send_bytes(
+            orjson.dumps(
+                {
+                    "type": message_type,
+                    "data": base64.b64encode(
+                        encrypt_text(conn[1], message, cid)
+                    ).decode("ascii") if secure_message else message,
+                    **extra_data
+                }
+            )
+        )
+        for cid, conn in ws_connections.items()
+        if cid != exclude_client_id
+    ]
 
     if coros:
         await asyncio.gather(*coros, return_exceptions=True)
@@ -236,9 +231,9 @@ async def cancel_typing(login, client_id, timeout=5):
             await asyncio.sleep(timeout)
         await broadcast_encrypted(
             message=login, message_type="user_is_not_typing",
-            exclude_client_id=client_id,
+            exclude_client_id=client_id, secure_message=False
         )
-    except asyncio.CancelledError:
+    except Exception:
         pass
 
 
@@ -258,26 +253,26 @@ async def index(request: Request):
 async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id: str):
     await websocket.accept()
 
-    client_pub_task = None
     typing_task = None
     registered = False
     ws_user = None
 
     try:
         # ===== HANDSHAKE =====
-        client_pub_task = asyncio.create_task(websocket.receive_bytes())
+        client_pub_json = orjson.loads(await asyncio.wait_for(websocket.receive_bytes(), timeout=5))
+        server_private = generate_private_key()
+        server_aes = AESGCM(
+            derive_aes_key(server_private, import_public_jwk(client_pub_json["jwk"]), client_id.encode("ascii"))
+        )
 
-        server_priv = generate_private_key()
-        await websocket.send_bytes(orjson.dumps({
-            "type": "public_key", "jwk": export_public_jwk(server_priv)
-        }))
-
-        client_pub_json = orjson.loads(await asyncio.wait_for(client_pub_task, timeout=5))
-        client_pub_key = import_public_jwk(client_pub_json["jwk"])
-        server_aes = derive_aes_key(server_priv, client_pub_key, client_id.encode("ascii"))
-
-        # TODO "канал захищено" після отримання цього
-        await websocket.send_bytes(orjson.dumps({"type": "handshake_ok"}))
+        await websocket.send_bytes(
+            orjson.dumps(
+                {
+                    "type": "handshake_ok",
+                    "jwk": export_public_jwk(server_private),
+                }
+            )
+        )
 
         # ===== AUTHORIZATION =====
         authenticated = False
@@ -322,7 +317,7 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
             }))
             return
 
-        # Зберігаємо як tuple: (websocket, aes_key, login) — швидший доступ ніж dict
+        # tuple: (websocket, AESGCM(aes_key), login)
         ws_connections[client_id] = (websocket, server_aes, ws_user.login)
         registered = True
 
@@ -339,105 +334,114 @@ async def websocket_endpoint(websocket: WebSocket, database: DATABASE, client_id
         await broadcast_encrypted(
             message=f"Кабан {ws_user.login} залетів в чат",
             message_type="system_message", exclude_client_id=client_id,
-            event="connected", source_client_id=client_id,
+            extra_data={"event": "connected", "client_id": client_id}
         )
 
         # ===== WEBSOCKET CYCLE =====
         while True:
             data = orjson.loads(await websocket.receive_bytes())
-            msg_type = data.get("type")
 
-            if msg_type == "encrypted_message":
-                message = decrypt_text(server_aes, base64.b64decode(data["data"]), client_id)
+            match data.get("type"):
+                case "encrypted_message":
+                    if typing_task and not typing_task.done():
+                        typing_task.cancel()
 
-                message_id = await database.scalar(
-                    insert(Message)
-                    .values(text=encrypt_text_for_database(message), user_id=ws_user.id)
-                    .returning(Message.id)
-                )
+                    message = decrypt_text(server_aes, base64.b64decode(data["data"]), client_id)
 
-                if typing_task and not typing_task.done():
-                    typing_task.cancel()
-                await cancel_typing(ws_user.login, client_id, timeout=0)
-                await database.commit()
-
-                await broadcast_encrypted(
-                    message=message, message_type="encrypted_message",
-                    exclude_client_id=client_id, owner=ws_user.login,
-                    extra_data={"message_id": message_id},
-                )
-
-            elif msg_type == "load_encrypted_messages":
-                if has_more:
-                    om = await get_last_encrypted_messages(
-                        database, client_id, server_aes, last_sent_at, last_msg_id
-                    )
-                    last_sent_at = om["last_sent_at"]
-                    last_msg_id = om["last_message_id"]
-                    has_more = om["has_more"]
-                    await websocket.send_bytes(orjson.dumps({
-                        "type": "load_encrypted_messages_success",
-                        "has_more": has_more, "messages": om["items"],
-                    }))
-                    continue
-
-                await websocket.send_bytes(orjson.dumps({
-                    "type": "load_encrypted_messages_canceled", "reason": "last messages not found",
-                }))
-
-            elif msg_type == "user_is_typing":
-                await broadcast_encrypted(
-                    message=ws_user.login, message_type="user_is_typing",
-                    exclude_client_id=client_id, secure_message=False,
-                )
-                if typing_task and not typing_task.done():
-                    typing_task.cancel()
-                typing_task = asyncio.create_task(cancel_typing(ws_user.login, client_id))
-
-            elif msg_type == "change_message":
-                new_text = decrypt_text(server_aes, base64.b64decode(data["new_text"]), client_id)
-                result = await database.execute(
-                    update(Message)
-                    .where(
-                        Message.user_id == ws_user.id, Message.id == data["message_id"],
-                    )
-                    .values(
-                        text=encrypt_text_for_database(new_text),
-                        is_changed=True
-                    )
-                )
-                if result.rowcount == 1:
-                    await broadcast_encrypted(
-                        message=new_text, message_type="change_message",
-                        exclude_client_id=client_id, extra_data={"message_id": data["message_id"]},
+                    message_id = await database.scalar(
+                        insert(Message)
+                        .values(text=encrypt_text_for_database(message), user_id=ws_user.id)
+                        .returning(Message.id)
                     )
                     await database.commit()
-                else:
-                    await database.rollback()
+
+                    await asyncio.gather(
+                        websocket.send_bytes(orjson.dumps({
+                            "type": "message_ack",
+                            "message_id": message_id,
+                        })),
+
+                        broadcast_encrypted(
+                            message=message, message_type="encrypted_message",
+                            exclude_client_id=client_id,
+                            extra_data={"message_id": message_id, "owner": ws_user.login},
+                        )
+                    )
+
+                case "load_encrypted_messages":
+                    if has_more:
+                        om = await get_last_encrypted_messages(
+                            database, client_id, server_aes, last_sent_at, last_msg_id
+                        )
+                        last_sent_at = om["last_sent_at"]
+                        last_msg_id = om["last_message_id"]
+                        has_more = om["has_more"]
+                        await websocket.send_bytes(orjson.dumps({
+                            "type": "load_encrypted_messages_success",
+                            "has_more": has_more, "messages": om["items"],
+                        }))
+                        continue
+
+                    await websocket.send_bytes(orjson.dumps({
+                        "type": "load_encrypted_messages_canceled", "reason": "last messages not found",
+                    }))
+
+                case "user_is_typing":
+                    if typing_task and not typing_task.done():
+                        typing_task.cancel()
+                    typing_task = asyncio.create_task(cancel_typing(ws_user.login, client_id))
+
+                    await broadcast_encrypted(
+                        message=ws_user.login, message_type="user_is_typing",
+                        exclude_client_id=client_id, secure_message=False,
+                    )
+
+                case "change_message":
+                    new_text = decrypt_text(server_aes, base64.b64decode(data["new_text"]), client_id)
+                    result = await database.execute(
+                        update(Message)
+                        .where(
+                            Message.user_id == ws_user.id, Message.id == data["message_id"],
+                        )
+                        .values(
+                            text=encrypt_text_for_database(new_text),
+                            is_changed=True
+                        )
+                    )
+                    if result.rowcount == 1:
+                        await database.commit()
+                        await broadcast_encrypted(
+                            message=new_text, message_type="change_message",
+                            exclude_client_id=client_id, extra_data={"message_id": data["message_id"]},
+                        )
+                    else:
+                        await database.rollback()
 
     except WebSocketDisconnect:
         pass
 
-    except Exception:
+    except Exception as e:
         try:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except Exception:
             pass
 
     finally:
-        if client_pub_task and not client_pub_task.done():
-            client_pub_task.cancel()
         if typing_task and not typing_task.done():
             typing_task.cancel()
         if registered and client_id in ws_connections:
             conn = ws_connections.get(client_id)
             if conn and conn[0] is websocket:
-                ws_connections.pop(client_id, None)
+                del ws_connections[client_id]
                 try:
                     await broadcast_encrypted(
                         message=f"Кабан {ws_user.login if ws_user else client_id} с'їбався",
                         message_type="system_message", exclude_client_id=client_id,
-                        event="disconnected", source_client_id=client_id, extra_data={"login": ws_user.login if ws_user else None}
+                        extra_data={
+                            "login": ws_user.login if ws_user else None,
+                            "event": "disconnected",
+                            "client_id": client_id
+                        }
                     )
                 except Exception:
                     pass

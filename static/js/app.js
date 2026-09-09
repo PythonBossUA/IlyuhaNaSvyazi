@@ -1,6 +1,11 @@
 /* ============================================================
    Оптимізований клієнт: Binary WebSocket protocol
    + TYPING INDICATOR + РЕДАГУВАННЯ ПОВІДОМЛЕНЬ + is_changed
+   ОПТИМІЗАЦІЇ:
+   - Кешування TextEncoder/TextDecoder
+   - O(1) prepend замість O(n²)
+   - Не перестворюємо кнопки редагування
+   - Promise-based handshake (вирішує race condition)
 ============================================================ */
 "use strict";
 
@@ -12,10 +17,12 @@
     const clientId = document.body.dataset.clientId;
     const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/${clientId}`;
     const HKDF_INFO = "ilyuha-na-svyazi|v1|aes-gcm-256";
+    const HKDF_INFO_BYTES = enc.encode(HKDF_INFO); // Кешуємо
 
     // Стан
     let ws = null;
     let aesKey = null;
+    let keyPairPromise = null; // Promise замість змінної
     let myKeyPair = null;
     let isAuthenticated = false;
     let pendingAuth = false;
@@ -129,9 +136,8 @@
     // ============================================================
 
     function addEditedMark(wrap) {
-        let editedMark = wrap.querySelector(".msg-edited");
-        if (!editedMark) {
-            editedMark = document.createElement("span");
+        if (!wrap.querySelector(".msg-edited")) {
+            const editedMark = document.createElement("span");
             editedMark.className = "msg-edited";
             editedMark.textContent = "(мінєв)";
             const timeEl = wrap.querySelector(".msg-time");
@@ -166,12 +172,11 @@
         time.className = "msg-time";
         time.textContent = getTimeString();
 
-        // Спочатку додаємо основний вміст (bubble + time)
         wrap.append(bubble, time);
 
-        // ✅ Тепер кнопки дій додаються ВНИЗ, під часом повідомлення
+        // Кнопки дій додаються тільки для своїх повідомлень
         if (dir === "out" && messageId) {
-            const actions = createMessageActions(wrap, messageId, text);
+            const actions = createMessageActions(wrap, messageId);
             wrap.appendChild(actions);
         }
 
@@ -194,7 +199,8 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    function createMessageActions(wrap, messageId, currentText) {
+    // ОПТИМІЗАЦІЯ: кнопка читає текст з bubble, не зберігаємо в closure
+    function createMessageActions(wrap, messageId) {
         const actions = document.createElement("div");
         actions.className = "msg-actions";
 
@@ -203,7 +209,11 @@
         editBtn.textContent = "✎";
         editBtn.title = "Мінєти";
         editBtn.type = "button";
-        editBtn.addEventListener("click", () => startEditMessage(wrap, messageId, currentText));
+        editBtn.addEventListener("click", () => {
+            const bubble = wrap.querySelector(".bubble");
+            const currentText = bubble ? bubble.textContent : "";
+            startEditMessage(wrap, messageId, currentText);
+        });
 
         actions.appendChild(editBtn);
         return actions;
@@ -250,7 +260,6 @@
         buttonsWrap.append(saveBtn, cancelBtn);
 
         form.append(input, buttonsWrap);
-        // Вставляємо форму між часом і кнопками дій (або перед часом, якщо дій немає)
         const insertBeforeEl = actions || timeEl;
         if (insertBeforeEl && insertBeforeEl.parentNode === wrap) {
             wrap.insertBefore(form, insertBeforeEl);
@@ -258,7 +267,6 @@
             wrap.appendChild(form);
         }
 
-        // Анімація появи через наступний кадр
         requestAnimationFrame(() => form.classList.add("is-visible"));
 
         input.focus();
@@ -290,7 +298,6 @@
         if (!form) return;
 
         form.classList.remove("is-visible");
-        // Плавне приховування форми перед видаленням
         setTimeout(() => {
             if (form.parentNode) form.remove();
             bubble.style.display = "";
@@ -325,12 +332,7 @@
             bubble.style.display = "";
             if (actions) actions.style.display = "";
 
-            // Оновлюємо текст для майбутніх редагувань
-            if (actions) {
-                const newActions = createMessageActions(wrap, messageId, newText);
-                actions.replaceWith(newActions);
-            }
-
+            // ОПТИМІЗАЦІЯ: НЕ перестворюємо кнопки, бо вони читають текст з bubble
             addEditedMark(wrap);
             toast("Повідомлення помінєв", "ok");
         } catch (err) {
@@ -339,19 +341,13 @@
         }
     }
 
+    // ОПТИМІЗАЦІЯ: не перестворюємо кнопки
     function updateMessageFromServer(messageId, newText) {
         const wrap = messagesMap.get(messageId);
         if (!wrap) return;
 
         const bubble = wrap.querySelector(".bubble");
         if (bubble) bubble.textContent = newText;
-
-        // Оновлюємо текст для кнопки редагування
-        const actions = wrap.querySelector(".msg-actions");
-        if (actions) {
-            const newActions = createMessageActions(wrap, messageId, newText);
-            actions.replaceWith(newActions);
-        }
 
         addEditedMark(wrap);
     }
@@ -456,7 +452,6 @@
         time.className = "msg-time";
         time.textContent = formatHistoryTime(item.sent_at);
 
-        // ★ Додаємо позначку "(редаговано)" якщо is_changed === true
         if (item.is_changed) {
             const editedMark = document.createElement("span");
             editedMark.className = "msg-edited";
@@ -464,12 +459,10 @@
             time.appendChild(editedMark);
         }
 
-        // Спочатку основний вміст
         wrap.append(bubble, time);
 
-        // ✅ Потім — кнопки дій (знизу)
         if (isMine) {
-            const actions = createMessageActions(wrap, item.id, plaintext);
+            const actions = createMessageActions(wrap, item.id);
             wrap.appendChild(actions);
         }
 
@@ -505,6 +498,7 @@
         });
     }
 
+    // ОПТИМІЗАЦІЯ: O(1) замість O(n²)
     async function prependOlderMessages(items) {
         const oldScrollHeight = messagesEl.scrollHeight;
         const oldScrollTop = messagesEl.scrollTop;
@@ -517,9 +511,9 @@
         );
 
         const fragment = document.createDocumentFragment();
-        for (const el of rendered) {
-            if (!el) continue;
-            fragment.insertBefore(el, fragment.firstChild);
+        // Сервер повертає desc (новіші спочатку), тому йдемо з кінця
+        for (let i = rendered.length - 1; i >= 0; i--) {
+            if (rendered[i]) fragment.appendChild(rendered[i]);
         }
 
         if (!fragment.childNodes.length) return;
@@ -697,7 +691,7 @@
             const encryptedData = await IlyuhaCrypto.encryptText(aesKey, text, clientId);
 
             ws.send(enc.encode(JSON.stringify({ type: "encrypted_message", data: encryptedData })));
-            addMessage(text, "out");
+            addMessage(text, "out"); // Без messageId, додамо при message_ack
             messageText.value = "";
 
             lastTypingSent = 0;
@@ -729,6 +723,7 @@
         }
 
         aesKey = null;
+        keyPairPromise = null;
         myKeyPair = null;
         isAuthenticated = false;
         pendingAuth = false;
@@ -756,7 +751,9 @@
         ws.onopen = async () => {
             setStatus("Рукостискання…", "connect");
             try {
-                myKeyPair = await IlyuhaCrypto.generateKeyPair();
+                // ОПТИМІЗАЦІЯ: Promise замість змінної
+                keyPairPromise = IlyuhaCrypto.generateKeyPair();
+                myKeyPair = await keyPairPromise;
                 const jwk = await IlyuhaCrypto.exportPublicJwk(myKeyPair);
                 ws.send(enc.encode(JSON.stringify({ type: "public_key", jwk })));
             } catch (err) {
@@ -780,19 +777,15 @@
 
             try {
                 switch (msg.type) {
-
-                    case "public_key": {
+                    // Handshake: тепер отримуємо handshake_ok з JWK сервера
+                    case "handshake_ok": {
+                        const kp = await keyPairPromise;
                         const serverPublicKey = await IlyuhaCrypto.importPublicJwk(msg.jwk);
                         aesKey = await IlyuhaCrypto.deriveAesKey(
-                            myKeyPair.privateKey, serverPublicKey, clientId, HKDF_INFO
+                            kp.privateKey, serverPublicKey, clientId, HKDF_INFO
                         );
-                        syncLoginButton();
-                        toast("Канал захищено", "ok");
-                        break;
-                    }
-
-                    case "handshake_ok": {
                         setStatus("Очікуємо входу…", "connect");
+                        toast("Канал захищено", "ok"); // Тепер правильно
                         syncLoginButton();
                         break;
                     }
@@ -899,6 +892,23 @@
                         break;
                     }
 
+                    // ОПТИМІЗАЦІЯ: додаємо message_id до останнього повідомлення
+                    case "message_ack": {
+                        if (!isAuthenticated) return;
+                        const messageId = msg.message_id;
+                        if (!messageId) return;
+
+                        // Знаходимо останнє вихідне повідомлення без data-message-id
+                        const lastOutMsg = messagesEl.querySelector(".msg.out:last-of-type:not([data-message-id])");
+                        if (lastOutMsg) {
+                            lastOutMsg.dataset.messageId = messageId;
+                            messagesMap.set(messageId, lastOutMsg);
+                            const actions = createMessageActions(lastOutMsg, messageId);
+                            lastOutMsg.appendChild(actions);
+                        }
+                        break;
+                    }
+
                     case "encrypted_message": {
                         if (!isAuthenticated) return;
                         if (typeof msg.data !== "string") {
@@ -925,8 +935,6 @@
                                 : msg.event === "disconnected" ? "err" : "info";
                             addSystem(plaintext, kind);
 
-                            // ✅ ВИПРАВЛЕНО: видаляємо індикатор "друкує" ЛИШЕ для того користувача, який вийшов
-                            // Сервер надсилає login у полі msg.login (через extra_data={"login": ...})
                             if (msg.event === "disconnected" && typeof msg.login === "string" && msg.login) {
                                 removeUserTyping(msg.login);
                             }
@@ -997,6 +1005,7 @@
 
             isAuthenticated = false;
             aesKey = null;
+            keyPairPromise = null;
             myKeyPair = null;
             pendingAuth = false;
             pendingChange = false;
