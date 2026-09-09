@@ -200,7 +200,7 @@
 
         const editBtn = document.createElement("button");
         editBtn.className = "msg-action-btn";
-        editBtn.textContent = "✏️";
+        editBtn.textContent = "✎";
         editBtn.title = "Мінєти";
         editBtn.type = "button";
         editBtn.addEventListener("click", () => startEditMessage(wrap, messageId, currentText));
